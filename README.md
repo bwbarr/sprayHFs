@@ -1,8 +1,8 @@
 # Seastate-Dependent Air-Sea Heat Fluxes with Sea Spray in High Winds
 
-This repository contains subroutines to incorporate seastate-dependent sea spray heat flux physics into an existing bulk heat flux surface layer scheme in a coupled regional or global Earth system model.  Parameterization of sea spray generation, which is required for the spray heat flux physics, is also included.  The model implemented herein comes from Barr et al. (2023) (hereafter BCF23).  This model was originally developed by Ben Barr, Shuyi Chen, and Chris Fairall, and it is being actively updated and improved with contributions and collaboration from others including Hyodae Seo, Cesar Sauvage, Jim Edson, and Carol Anne Clayson.
+This repository contains subroutines to incorporate seastate-dependent sea spray heat flux physics into an existing bulk surface layer scheme in a coupled regional or global Earth system model.  Parameterization of sea spray generation, which is required for the spray heat flux physics, is also included.  The model implemented herein comes from Barr et al. (2023) (hereafter BCF23).  This model was originally developed by Ben Barr, Shuyi Chen, and Chris Fairall, and it is being actively updated and improved with additional contributions from others including Hyodae Seo, Cesar Sauvage, Jim Edson, and Carol Anne Clayson.
 
-The code in this repository was designed to allow implementation of spray heat flux physics into an existing bulk heat flux algorithm with minimal disruption to the existing bulk code.  All subroutines required to implement the spray heat flux model are contained in the module file `module_sprayHFs.F`.  To use the code, a user will download `module_sprayHFs.F` into their existing code base, modify their existing surface flux calculations to add a call to the top-level subroutine `sprayHFs()` and to manage its input/output (discussed fully in Section 2 below), and compile `module_sprayHFs.F` with the existing model code.  Other than minor changes to integrate `module_sprayHFs.F` into the existing code base (suppressing optional output, etc), the user should not have to change any code in `module_sprayHFs.F` to implement it (i.e., it is ready to use "out of the box").
+The code in this repository was designed to implement spray heat flux physics into an existing Fortran bulk heat flux algorithm with minimal disruption to the existing bulk code.  All subroutines required to implement the spray model are contained in the Fortran module file `module_sprayHFs.F`.  To use the code, a user will download `module_sprayHFs.F` into their existing code base, modify their existing surface flux calculations to add a call to the top-level subroutine `sprayHFs()` and to manage its input/output (discussed fully in Section 2 below), and compile `module_sprayHFs.F` with the existing model code.  Other than minor changes to integrate `module_sprayHFs.F` into the existing code base (suppressing optional output, etc), the user should not have to change any code in `module_sprayHFs.F` to implement it (i.e., it is ready to use "out of the box").
 
 Please send any questions about model physics or this module's implementation to Ben Barr at benjamin.barr@whoi.edu.
 
@@ -10,27 +10,24 @@ Spray generation physics and subroutines are discussed in Section 1 below, and s
 
 ## 1. Sea Spray Generation
 
-Breaking waves eject sea spray droplets into the air, and these droplets participate in many physical processes affecting air-sea exchange in high winds.  There are many parameterizations for spray generation, with many unresolved issues.  We include code for several parameterizations for spray generation, based on both wind and on seastate.  We recommend using the seastate-based model from BCF23 (option `BCF23_Seastate` below) to directly address the physical processes related to spray production, although there are not yet sufficient observations to determine whether any given wind or seastate based model is more quantitatively correct under a given set of environmental conditions.  Comparison of spray generation models across diverse air-sea-wave conditions in your modeling system is encouraged!  The available spray generation models are:
+Breaking waves eject sea spray droplets into the air, and these droplets participate in physical processes that affect air-sea exchange in high winds.  There are many parameterizations for spray generation, with numerous unresolved issues.  We include several parameterizations for spray generation, based both on wind and on seastate.  We recommend using the seastate-based model from BCF23 (option `BCF23_Seastate` below) to directly address physical processes related to spray production, although there are not yet sufficient observations to determine whether any given wind or seastate based model is more quantitatively correct under a given set of environmental conditions.  Comparison of spray generation models across diverse air-sea-wave conditions in your modeling system is encouraged!  The available spray generation models are:
 
-+ `BCF23_Seastate`: A seastate-dependent spray generation model presented in BCF23 Eq. 1.
-+ `F94_MOM80`: The widely-used Fairall et al. (1994) (hereafter F94) wind-dependent source function, with the universal source function shape per Mueller and Veron (2014) and the original whitecap fraction per Monahan and O'Muircheartaigh (1980).
-+ `F94_BCF23`: An update to the F94 wind-dependent source function given as BCF23 Eq. 3, with the universal source function shape per Mueller and Veron (2014) and the whitecap fraction per BCF23 Eq. A2.
++ `BCF23_Seastate`: A seastate-dependent spray generation model presented in BCF23 Eq. 1.  In this model, both the total spray mass flux and droplet size distribution change with wind-wave conditions.
++ `F94_MOM80`: The widely-used Fairall et al. (1994) (hereafter F94) wind-dependent source function, with the droplet size distribution per Mueller and Veron (2014) and the original whitecap fraction per Monahan and O'Muircheartaigh (1980).
++ `F94_BCF23`: An update to the F94 wind-dependent source function given as BCF23 Eq. 3, with the droplet size distribution per Mueller and Veron (2014) and the whitecap fraction per BCF23 Eq. A2.
 
 The spray generation model is selected by providing one of the string keys above to the subroutine `sprayHFs()`, as discussed in Section 2.
 
-## 2. Sea Spray Heat Fluxes
+## 2. Air-Sea Heat Fluxes with Spray
 
-Spray heat fluxes change the total surface sensible and latent heat fluxes and the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$, are
+Spray heat fluxes change the total surface sensible and latent heat fluxes and the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$ respectively, are
 
 $$H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr}$$
 
-!       H_L1 = H_L0pr + gamma_L*H_Lspr            = H_L0pr + dHL1spr
-!
-! Here H_S0pr and H_L0pr are the bulk sensible and latent heat fluxes without 
-! spray, which are calculated by the existing surface layer scheme.  H_Sspr,
-! H_Rspr, and H_Lspr are spray heat fluxes, and gamma_S and gamma_L are feedback
-! coefficients.  We define dHS1spr = gamma_S*(H_Sspr - H_Rspr) and dHL1spr = 
-! gamma_L*H_Lspr as the changes to the existing bulk heat fluxes due to spray.
+$$H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr}$$
+
+Here $H^{\prime}_S$ and $H^{\prime}_L$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.
+
 !     A user incorporates spray heat fluxes into an existing bulk surface layer 
 ! code by calling subroutine sprayHFs() directly after the existing calculation 
 ! of the bulk heat fluxes H_S0pr and H_L0pr.  sprayHFs() returns dHS1spr and 
