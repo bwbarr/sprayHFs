@@ -22,12 +22,15 @@ The spray generation model is selected by providing one of the string keys above
 
 Spray heat fluxes change the total surface sensible and latent heat fluxes and the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$ respectively, are
 
+```math
 $$H_{S,1} = H'_S$$
-
-$$H_{S,1} = H'_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H'_S + dH_{S,1,spr}$$
-
+```
+```math
+$$H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr}$$
+```
+```math
 $$H_{L,1} = H'_L + \gamma_L H_{L,spr} = H'_L + dH_{L,1,spr}$$
-
+```
 Here $H'_S$ and $H'_L$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.
 
 !     A user incorporates spray heat fluxes into an existing bulk surface layer 
