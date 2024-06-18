@@ -22,6 +22,8 @@ The spray generation model is selected by providing one of the string keys above
 
 Spray heat fluxes change the total surface sensible and latent heat fluxes and the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$ respectively, are
 
+$$H_{S,1} = $$
+
 $$H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr}$$
 
 $$H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr}$$
