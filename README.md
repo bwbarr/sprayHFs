@@ -24,26 +24,14 @@ Spray heat fluxes change the total surface sensible and latent heat fluxes and t
 
 ```math
 H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr}
+```
+```math
 H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr}
 ```
 Here $`H^{\prime}_S`$ and $`H^{\prime}_L`$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.
 
-!     A user incorporates spray heat fluxes into an existing bulk surface layer 
-! code by calling subroutine sprayHFs() directly after the existing calculation 
-! of the bulk heat fluxes H_S0pr and H_L0pr.  sprayHFs() returns dHS1spr and 
-! dHL1spr.  Then, the user adds dHS1spr to H_S0pr and dHL1spr to H_L0pr.  Note 
-! that some models carry latent heat and moisture fluxes separately -- update 
-! moisture flux here too if necessary.  Finally, if the existing code does not 
-! calculate the Obukhov length L directly from the modified H_S0pr and H_L0pr 
-! (for instance, L may be calculated from a "theta v star" (variable name 
-! thvstar in this code) that is computed separately from H_S0pr and H_L0pr), the
-! user must also make sure that dHS1spr and dHL1spr are incorporated correctly 
-! into the calculation of L.  sprayHFs() outputs a calculation of thvstar for 
-! reference.  Note that sprayHFs() takes L as an input, just like a standard 
-! bulk flux algorithm.  The implicit relationship between L and the spray heat 
-! fluxes should be treated the same as in the existing bulk model, i.e., the L 
-! passed to sprayHFs() should come from the previous timestep or from the 
-! previous iteration if there is an internal loop for L.
+A user incorporates spray heat fluxes into an existing bulk surface layer code by calling subroutine `sprayHFs()` directly after the existing calculation of the bulk heat fluxes $`H^{\prime}_S`$ and $`H^{\prime}_L`$.  `sprayHFs()` returns $dH_{S,1,spr}$ (variable name `dHS1spr`) and $dH_{L,1,spr}$ (variable name `dHL1spr`).  Then, the user adds $dH_{S,1,spr}$ to $`H^{\prime}_S`$ and $dH_{L,1,spr}$ to $`H^{\prime}_L`$.  Note that some models carry latent heat and moisture fluxes separately -- update moisture flux here too if necessary.  Finally, if the existing code does not calculate the Obukhov length $L$ directly from the modified $`H^{\prime}_S`$ and $`H^{\prime}_L`$ (for instance, $L$ may be calculated from a $`\theta_v*`$ (i.e., the turbulent flux scale for virtual potential temperature) that is computed separately from $`H^{\prime}_S`$ and $`H^{\prime}_L`$), the user must also make sure that $dH_{S,1,spr}$ and $dH_{L,1,spr}$ are incorporated correctly into the calculation of $L$.  `sprayHFs()` outputs a calculation of $`\theta_v*`$ for reference.  Note that `sprayHFs()` takes $L$ as an input.  The implicit relationship between $L$ and the spray heat fluxes should be treated the same as in the existing bulk model, i.e., the $L$ passed to `sprayHFs()` should come from the previous timestep or from the previous iteration if there is an internal loop for $L$.
+
 !     Subroutine sprayHFs() uses fields at the lowest model mass level and at 
 ! the surface, which should be the same fields that are used by the existing 
 ! bulk algorithm code.  Additional information on input fields can be found in 
