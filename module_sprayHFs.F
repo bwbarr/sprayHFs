@@ -17,119 +17,14 @@ PUBLIC :: fall_velocity_PK97
 
 !===============================================================================
 !
-!      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!      ~ SEASTATE-DEPENDENT AIR-SEA HEAT FLUXES WITH SPRAY IN HIGH WINDS ~
-!      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!        SEASTATE-DEPENDENT AIR-SEA HEAT FLUXES WITH SPRAY IN HIGH WINDS 
 !
-!     This module contains subroutines to incorporate sea spray heat flux 
-! physics into an existing bulk flux surface layer scheme with minimal 
-! disruption to the existing bulk code.  This includes parameterizing spray 
-! generation, with both seastate-dependent and wind-dependent options available.
-! The model implemented herein comes from Barr et al. (2023) (hereafter BCF23).
-! Spray generation subroutines are discussed in section 1 below, and spray heat
-! flux subroutines are discussed in section 2.
-!     This module is implemented by downloading the file module_sprayHFs.F in 
-! its entirety, adding a call to the top-level function sprayHFs() in the 
-! existing bulk code as discussed below, and compiling module_sprayHFs.F with 
-! the existing model code.  Subroutines in this module are set up to return a 
-! number of INTENT(OUT) fields that are not needed by the existing calling code but that are useful 
-! for debugging and interpreting the model's behavior (e.g., feedback 
-! coefficients).  The user may modify this module's code to not return these 
-! fields.  Other than this and other minor changes to integrate the module into 
-! the existing code base (e.g., changing the module name), the user SHOULD NOT 
-! HAVE TO CHANGE ANY CODE IN THIS MODULE to implement it.
-!
-!     Please send any questions about model physics or this module's 
+!     This module contains subroutines to incorporate seastate-dependent sea 
+! spray heat flux physics into an existing bulk surface layer scheme in coupled 
+! regional or global Earth system models.  This code is maintained at 
+! https://github.com/bwbarr/sprayHFs, where documentation and the latest version
+! are available.  Please send any questions about model physics or this module's
 ! implementation to Ben Barr at benjamin.barr@whoi.edu.
-!
-!     Code Revision History:
-!       - V1.0 (June 17, 2024): Spray generation and heat flux physics 
-!             implemented.
-!
-!
-! -------------------------- 1. SPRAY GENERATION -------------------------------
-!     Breaking waves eject sea spray droplets into the air, and these droplets
-! participate in many physical processes affecting air-sea exchange in high
-! winds.  There are many parameterizations for spray generation, with many
-! unresolved issues.  We include several parameterizations for spray generation,
-! based on both wind only and on seastate.  We recommend using seastate-based
-! models to directly address the physical processes related to spray production,
-! although there are not yet sufficient observations to determine whether a
-! given wind or seastate based model is more quantitatively correct under a 
-! specified set of conditions.  Comparison of spray generation models across 
-! diverse air-sea-wave conditions is encouraged!
-!     The available spray generation models are:
-!       1. 'BCF23_Seastate': A seastate-dependent spray generation model 
-!          presented in Barr et al. 2023 (hereafter BCF23), Eq. 1.
-!       2. 'F94_MOM80': The widely-used Fairall et al. (1994) (hereafter F94) 
-!          wind-dependent source function, with the universal source function 
-!          shape per Mueller and Veron (2014) and the whitecap fraction per 
-!          Monahan and O'Muircheartaigh (1980).
-!       3. 'F94_BCF23': An update to the F94 wind-dependent source function 
-!          given as BCF23 Eq. 3, with the universal source function shape per 
-!          Mueller and Veron (2014) and the whitecap fraction per BCF23 Eq. A2.
-!     The spray generation model is selected by providing one of the string keys
-! above to the subroutine sprayHFs(), as discussed in section 2.0.
-!
-!
-! ------------------------- 2. SPRAY HEAT FLUXES -------------------------------
-!     Spray heat fluxes change the total surface sensible and latent heat fluxes
-! and the buoyancy flux (i.e., the Obukhov length) used for stability 
-! calculations.  Spray heat flux physics are implemented according to BCF23.  
-! Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes 
-! with spray, H_S1 and H_L1, are
-!
-!       H_S1 = H_S0pr + gamma_S*(H_Sspr - H_Rspr) = H_S0pr + dHS1spr
-!
-!       H_L1 = H_L0pr + gamma_L*H_Lspr            = H_L0pr + dHL1spr
-!
-! Here H_S0pr and H_L0pr are the bulk sensible and latent heat fluxes without 
-! spray, which are calculated by the existing surface layer scheme.  H_Sspr,
-! H_Rspr, and H_Lspr are spray heat fluxes, and gamma_S and gamma_L are feedback
-! coefficients.  We define dHS1spr = gamma_S*(H_Sspr - H_Rspr) and dHL1spr = 
-! gamma_L*H_Lspr as the changes to the existing bulk heat fluxes due to spray.
-!     A user incorporates spray heat fluxes into an existing bulk surface layer 
-! code by calling subroutine sprayHFs() directly after the existing calculation 
-! of the bulk heat fluxes H_S0pr and H_L0pr.  sprayHFs() returns dHS1spr and 
-! dHL1spr.  Then, the user adds dHS1spr to H_S0pr and dHL1spr to H_L0pr.  Note 
-! that some models carry latent heat and moisture fluxes separately -- update 
-! moisture flux here too if necessary.  Finally, if the existing code does not 
-! calculate the Obukhov length L directly from the modified H_S0pr and H_L0pr 
-! (for instance, L may be calculated from a "theta v star" (variable name 
-! thvstar in this code) that is computed separately from H_S0pr and H_L0pr), the
-! user must also make sure that dHS1spr and dHL1spr are incorporated correctly 
-! into the calculation of L.  sprayHFs() outputs a calculation of thvstar for 
-! reference.  Note that sprayHFs() takes L as an input, just like a standard 
-! bulk flux algorithm.  The implicit relationship between L and the spray heat 
-! fluxes should be treated the same as in the existing bulk model, i.e., the L 
-! passed to sprayHFs() should come from the previous timestep or from the 
-! previous iteration if there is an internal loop for L.
-!     Subroutine sprayHFs() uses fields at the lowest model mass level and at 
-! the surface, which should be the same fields that are used by the existing 
-! bulk algorithm code.  Additional information on input fields can be found in 
-! the header of the sprayHFs() subroutine code.  sprayHFs() is set up for
-! calling point-by-point, i.e., within the double DO loops over x and y 
-! horizontal gridpoints.  sprayHFs() automatically sets spray heat fluxes to 
-! zero if the (internally calculated) 10-m windspeed is less than a 
-! predetermined, hard-coded lower bound.  The user is responsible for making 
-! sure that sprayHFs() is only called for water points, i.e., sprayHFs() has no 
-! internal check for land vs water.
-!     The user selects the spray generation function to use in sprayHFs() by
-! specifying one of the string keys in section 1.0 for the input variable
-! whichSSGF.  If using the seastate-based model 'BCF23_Seastate', all wave
-! parameters are required (eps, dcp, swh, mss).  If using a wind-based model
-! ('F94_MOM80' or 'F94_BCF23'), swh is still required (for calculating the
-! droplet settling timescale), but the remaining wave parameters (eps, dcp, mss)
-! are not used (the user should pass dummy values, e.g., zeros or NaNs).
-!     Subroutine sprayHFs() makes internal calculations for H_S0pr and H_L0pr, 
-! as well as for ustar and the wind profile.  These internal values may not 
-! exactly match those in the existing bulk code if, for instance, different 
-! stability functions are used.  This is probably OK and should not affect 
-! dHS1spr and dHL1spr very much.  Please contact Ben Barr if you are interested 
-! in discussing ways to reconcile any discrepancies.
-!     All INTENT(OUT) fields returned by sprayHFs() other than dHS1spr and
-! dHL1spr are for debugging/interpretation and can be suppressed by the user if
-! desired.
 !
 !===============================================================================
 
@@ -944,4 +839,4 @@ END FUNCTION
 
 !===============================================================================
 
-END MODULE module_sf_spray
+END MODULE module_sprayHFs
