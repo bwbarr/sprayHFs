@@ -42,7 +42,8 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !-------------------------------------------------------------------------------
 !
 ! Subroutine to calculate spray modifications to sensible and latent heat 
-! fluxes, i.e., dHS1spr and dHL1spr.  Implemented per BCF23.
+! fluxes, i.e., dHS1spr and dHL1spr.  Implemented per Barr et al. (2023) 
+! (hereafter BCF23).
 !
 ! Inputs:
 !     z_1 - height of lowest atmospheric model mass level [m]
