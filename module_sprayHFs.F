@@ -46,8 +46,8 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !
 ! Inputs:
 !     z_1 - height of lowest atmospheric model mass level [m]
-!     t_1 - temperature at z_1 [K]
-!     q_1 - specific humidity at z_1 [kg kg-1]
+!     t_1 - air temperature at z_1 [K]
+!     q_1 - air specific humidity at z_1 [kg kg-1]
 !     U_1 - current-relative windspeed magnitude at z_1 [m s-1].  Does not
 !         include gustiness.
 !     gf - gust factor accounting for gustiness at low winds [-]. gf = Sg_1/U_1,
@@ -61,7 +61,8 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !     mss - mean squared waveslope [-]
 !     L - Obukhov stability length [m].  This is considered "known" for this
 !         subroutine's computations but will be determined iteratively or
-!         quasi-iteratively by the existing bulk algorithm code.
+!         quasi-iteratively (i.e., updated every model timestep) by the existing
+!         bulk algorithm code.
 !     z0 - momentum roughness length [m].  If surface stress comes from a bulk
 !         algorithm (e.g., COARE), pass the parameterized z0.  If surface stress
 !         comes from a wave model, invert and pass an equivalent z0 based on MO 
@@ -76,7 +77,7 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 ! Outputs:
 !     dHS1spr - change to bulk surface sensible heat flux due to spray [W m-2]
 !     dHL1spr - change to bulk surface latent heat flux due to spray [W m-2]
-!     thvstar - turbulent scale for virtual potential temperature flux [K], 
+!     thvstar - turbulent flux scale for virtual potential temperature [K], 
 !         based on total fluxes (interfacial + spray with feedback).  This is 
 !         included for reference/comparison in case the existing bulk algorithm
 !         calculates L from its own computation of thvstar.
@@ -88,8 +89,8 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !         LHF from existing bulk code.
 !     M_spr - spray generated mass flux [kg m-2 s-1]
 !     H_Tspr - spray heat flux due to temperature change [W m-2].  This is
-!         exactly equal to the spray enthalpy flux, H_Kspr.  H_Kspr is not used
-!         in this code but is used in BCF23.
+!         exactly equal to the spray enthalpy flux, H_Kspr.  H_Kspr is not a 
+!         variable used in this code, but it is discussed in the BCF23 paper.
 !     H_Rspr - spray heat flux due to size change [W m-2]
 !     H_SNspr - net spray sensible heat flux [W m-2], including both the direct
 !         heating flux (H_Sspr) and the evaporative cooling flux (-H_Rspr), 
