@@ -35,15 +35,17 @@ CONTAINS
 !===============================================================================
 
 SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
-               whichSSGF,dHS1spr,dHL1spr,thvstar,tau,H_S0pr,H_L0pr,M_spr,&
+               z_ref,whichSSGF,dHS1_spr,dHL1_spr,dthstar_spr,dqstar_spr,&
+               dtref_spr,dqref_spr,dsref_spr,tau,H_S0pr,H_L0pr,thvstar,M_spr,&
                H_Tspr,H_Rspr,H_SNspr,H_Lspr,alpha_S,beta_S,beta_L,gamma_S,&
-               gamma_L,delt_spr,delq_spr,dels_spr)
+               gamma_L)
 
 !-------------------------------------------------------------------------------
 !
-! Subroutine to calculate spray modifications to sensible and latent heat 
-! fluxes, i.e., dHS1spr and dHL1spr.  Implemented per Barr et al. (2023) 
-! (hereafter BCF23).
+! Subroutine to calculate spray modifications to heat fluxes and surface layer 
+! properties.  Implemented per Barr et al. (2023) (hereafter BCF23).  Heat 
+! fluxes from the ocean to the atmosphere are defined as positive, and momentum
+! fluxes (stress) from the atmosphere to the ocean are defined as positive.
 !
 ! Inputs:
 !     z_1 - height of lowest atmospheric model mass level [m]
@@ -55,39 +57,53 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !         where Sg_1 is the windspeed magnitude at z_1 including gustiness.  If 
 !         not accounting for gustiness, pass gf = 1.
 !     p_0 - surface pressure [Pa]
-!     t_0 - sea surface temperature [K]
+!     t_0 - sea surface temperature (interfacial temp, not bulk layer temp) [K]
 !     eps - wave energy dissipation flux [W m-2]
 !     dcp - dominant wave phase speed [m s-1]
 !     swh - significant wave height [m]
 !     mss - mean squared waveslope [-]
 !     L - Obukhov stability length [m].  This is considered "known" for this
-!         subroutine's computations but will be determined iteratively or
-!         quasi-iteratively (i.e., updated every model timestep) by the existing
-!         bulk algorithm code.
+!         subroutine's computations but may be determined iteratively by the 
+!         existing bulk algorithm code.
 !     z0 - momentum roughness length [m].  If surface stress comes from a bulk
 !         algorithm (e.g., COARE), pass the parameterized z0.  If surface stress
 !         comes from a wave model, invert and pass an equivalent z0 based on MO 
 !         theory using stress, U_1, gf, and L.
 !     z0t - thermal roughness length [m]
 !     z0q - moisture roughness length [m].  Does not have to be equal to z0t.
+!     z_ref - reference height for calculating spray changes to subgrid surface 
+!         layer temperature, specific humidity, and saturation ratio [m].  This 
+!         may be used to update the existing code's calculations of temperature 
+!         and specific humidity at a reference height (e.g., 2 m).  The physics 
+!         of this parameterization do not produce direct changes to the subgrid 
+!         wind profile.  z_ref should not be larger than z_1.  Pass -1 for z_ref
+!         to calculate these changes at the mid-spray layer height.
 !     whichSSGF - string naming which SSGF to use.  Options are:
 !         'BCF23_Seastate': seastate-dependent, per BCF23 Eq. 1.
 !         'F94_MOM80': widely used F94 wind-based SSGF, using original whitecap 
 !             fraction per Monahan and O'Muircheartaigh (1980).
 !         'F94_BCF23': updated F94 wind-based SSGF given as BCF23 Eq. 3.
 ! Outputs:
-!     dHS1spr - change to bulk surface sensible heat flux due to spray [W m-2]
-!     dHL1spr - change to bulk surface latent heat flux due to spray [W m-2]
-!     thvstar - turbulent flux scale for virtual potential temperature [K], 
-!         based on total fluxes (interfacial + spray with feedback).  This is 
-!         included for reference/comparison in case the existing bulk algorithm
-!         calculates L from its own computation of thvstar.
+!     dHS1_spr - change to total surface sensible heat flux due to spray [W m-2]
+!     dHL1_spr - change to total surface latent heat flux due to spray [W m-2]
+!     dthstar_spr - change to total theta flux scale due to spray [K]
+!     dqstar_spr - change to total q flux scale due to spray [kg kg-1]
+!     dtref_spr - change to temperature at user-specified reference height due 
+!         to spray heat flux feedback [K], (+) = warming
+!     dqref_spr - change to q at user-specified reference height due to spray 
+!         heat flux feedback [kg kg-1], (+) = moistening
+!     dsref_spr - change to saturation ratio at user-specified reference height 
+!         due to spray heat flux feedback [-], (+) = s increases
 !     tau - bulk stress [Pa].  Ideally, should be equal to bulk stress from
 !         existing bulk code.
 !     H_S0pr - bulk SHF without spray [W m-2].  Ideally, should be equal to bulk
 !         SHF from existing bulk code.
 !     H_L0pr - bulk LHF without spray [W m-2].  Ideally, should be equal to bulk
 !         LHF from existing bulk code.
+!     thvstar - turbulent flux scale for virtual potential temperature [K], 
+!         based on total fluxes (interfacial + spray with feedback).  This is 
+!         included for reference/comparison in case the existing bulk algorithm
+!         calculates L from its own computation of thvstar.
 !     M_spr - spray generated mass flux [kg m-2 s-1]
 !     H_Tspr - spray heat flux due to temperature change [W m-2].  This is
 !         exactly equal to the spray enthalpy flux, H_Kspr.  H_Kspr is not a 
@@ -107,20 +123,32 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !         sensible heat flux [-]
 !     gamma_L - feedback coefficient between spray heat fluxes and interfacial
 !         latent heat flux [-]
-!     delt_spr - change to surface layer temperature at mid-spray-layer height
-!         due to spray heat flux feedback [K], (+) = warming
-!     delq_spr - change to surface layer q at mid-spray-layer height due to
-!         spray heat flux feedback [kg kg-1], (+) = moistening
-!     dels_spr - change to surface layer saturation ratio at mid-spray-layer
-!         height due to spray heat flux feedback [-], (+) = s increases
 !
 !-------------------------------------------------------------------------------
 
-REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q
+REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,z_ref
 CHARACTER(LEN=100),INTENT(IN) :: whichSSGF
-REAL,INTENT(OUT) :: dHS1spr,dHL1spr
-REAL,INTENT(OUT) :: thvstar,tau,H_S0pr,H_L0pr,M_spr,H_Tspr,H_Rspr,H_SNspr,&
-        H_Lspr,alpha_S,beta_S,beta_L,gamma_S,gamma_L,delt_spr,delq_spr,dels_spr
+REAL,INTENT(OUT) :: dHS1_spr
+REAL,INTENT(OUT) :: dHL1_spr
+REAL,INTENT(OUT) :: dthstar_spr
+REAL,INTENT(OUT) :: dqstar_spr
+REAL,INTENT(OUT) :: dtref_spr
+REAL,INTENT(OUT) :: dqref_spr
+REAL,INTENT(OUT) :: dsref_spr
+REAL,INTENT(OUT) :: tau
+REAL,INTENT(OUT) :: H_S0pr
+REAL,INTENT(OUT) :: H_L0pr
+REAL,INTENT(OUT) :: thvstar
+REAL,INTENT(OUT) :: M_spr
+REAL,INTENT(OUT) :: H_Tspr
+REAL,INTENT(OUT) :: H_Rspr
+REAL,INTENT(OUT) :: H_SNspr
+REAL,INTENT(OUT) :: H_Lspr
+REAL,INTENT(OUT) :: alpha_S
+REAL,INTENT(OUT) :: beta_S
+REAL,INTENT(OUT) :: beta_L
+REAL,INTENT(OUT) :: gamma_S
+REAL,INTENT(OUT) :: gamma_L
 
 REAL,PARAMETER :: sprayLB = 10.0    ! Lower bound on U_10 for spray production. 10 m s-1 is typical for whitecapping
 REAL,PARAMETER :: kappa = 0.4    ! von Karman constant [-]
@@ -137,14 +165,13 @@ REAL,PARAMETER :: Ms = 58.44    ! Molecular weight of salt [g mol-1]
 REAL,PARAMETER :: xs = 0.035    ! Mass fraction of salt in seawater [-]
 
 REAL :: Sg_1,ustar,U_10
-REAL :: Lv,delspr,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_delsprD2,th_0,th_1,tC_1,k_a,&
-        nu_a,Dv_a,gammaWB
-REAL :: psiH_1,psiH_delspr,psiH_delsprD2,phisprH_delspr,phisprH_delsprD2,&
-        thstar_pr,qstar_pr,G_S,G_L,t_delsprD2pr,q_delsprD2pr,s_delsprD2pr
+REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_zref,th_0,th_1,tC_1,&
+        k_a,nu_a,Dv_a,gammaWB
+REAL :: psiH_1,psiH_delspr,psiH_zref,phisprH_delspr,phisprH_zref,thstar_pr,&
+        qstar_pr,G_S,G_L,t_zref_pr,q_zref_pr,s_zref_pr
 REAL :: zR,H_Sspr,H_Tsprpr,H_Ssprpr,H_Rsprpr,H_Lsprpr
 REAL :: etaT,Cs_pr,C_HIG,H_IG,Psi,Chi,Lambda,A,B,C,B2M4AC,s_hatPOS,H_Rspr_IG
-REAL :: H_S1,H_L1,H_S0,H_L0,t_delsprD2,q_delsprD2,s_delsprD2,thstar_tot,&
-        qstar_tot
+REAL :: H_S1,H_L1,H_S0,H_L0,t_zref,q_zref,s_zref,thstar,qstar
 CHARACTER(LEN=100) :: Wform
 
 ! Droplet radius vector [m]
@@ -162,26 +189,31 @@ REAL,DIMENSION(25) :: v_g,dmdr0,tauf,Fp,tauT,zT
 Sg_1 = U_1*gf    ! Windspeed magnitude at z_1 including gustiness [m s-1]
 ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensity (not bulk friction velocity) [m s-1]
 U_10 = ustar/kappa/gf*(LOG(10./z0) - stabIntM(10./L))    ! 10m windspeed [m s-1], gustiness removed
-IF (U_10 < sprayLB) THEN    ! Set dHS1spr and dHL1spr to zero, and set dummy values (999) for other returned fields
+IF (U_10 < sprayLB) THEN    ! Set returned fields to zero or dummy (999) values
 
-    dHS1spr = 0.; dHL1spr = 0.
+    dHS1_spr = 0.; dHL1_spr = 0.; dthstar_spr = 0.; dqstar_spr = 0.
+    dtref_spr = 0.; dqref_spr = 0.; dsref_spr = 0.
     thvstar = 999.; tau = 999.; H_S0pr = 999.; H_L0pr = 999.; M_spr = 999.
     H_Tspr = 999.; H_Rspr = 999.; H_SNspr = 999.; H_Lspr = 999.
     alpha_S = 999.; beta_S = 999.; beta_L = 999.; gamma_S = 999.; gamma_L = 999.
-    delt_spr = 999.; delq_spr = 999.; dels_spr = 999.
 
 ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
 
     ! 2. Get properties and environmental variables ----------------------------
     Lv = (2.501-0.00237*(t_0-273.15))*1e6    ! Latent heat of vap for water [J kg-1]
     delspr = MIN(swh,z_1)    ! Spray layer thickness [m], nominally one swh per M&V2014a.  Limited to z_1.
+    IF (z_ref < 0.) THEN    ! Set reference height to user-defined value or mid-spray layer height
+        zref = delspr/2.
+    ELSE
+        zref = z_ref
+    END IF
     rdryBYr0 = (xs*rho_sw/rho_dry)**(1/3)    ! Ratio of dry salt radius to r0 [-]
     y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1 - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
     q_0 = qsat0(t_0,p_0)*(1 + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
     tv_1 = t_1*(1+0.608*q_1)    ! Virtual temperature at z_1 [K]
     rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density nominally at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
-    p_1        = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
-    p_delsprD2 = p_0 - rho_a*g*delspr/2    ! Pressure at delspr/2 [Pa]
+    p_1    = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
+    p_zref = p_0 - rho_a*g*zref    ! Pressure at zref [Pa]
     th_0 = t_0*(1e5/p_0)**0.286    ! Potential temperature at surface [K]
     th_1 = t_1*(1e5/p_1)**0.286    ! Potential temperature at z_1 [K]
     tC_1 = t_1 - 273.15    ! Convert t_1 to [C] for property calculations
@@ -191,11 +223,11 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     gammaWB = 240.97*17.502/(tC_1+240.97)**2    ! gamma = (dqsat/dT)/qsat [K-1], per Buck (1981)
 
     ! 3. Calculate fluxes w/o spray and some stability/feedback items ----------
-    psiH_1        = stabIntH(z_1/L)    ! Stability integral for heat at z_1 [-]
-    psiH_delspr   = stabIntH(delspr/L)    ! Stability integral for heat at delspr [-]
-    psiH_delsprD2 = stabIntH(delspr/2./L)    ! Stability integral for heat at delspr/2 [-]
-    phisprH_delspr   = stabIntSprayH(delspr/L)    ! Stability integral for heat with spray at delspr [-]
-    phisprH_delsprD2 = stabIntSprayH(delspr/2./L)    ! Stability integral for heat with spray at delspr/2 [-]
+    psiH_1      = stabIntH(z_1/L)    ! Stability integral for heat at z_1 [-]
+    psiH_delspr = stabIntH(delspr/L)    ! Stability integral for heat at delspr [-]
+    psiH_zref   = stabIntH(zref/L)    ! Stability integral for heat at zref [-]
+    phisprH_delspr = stabIntSprayH(delspr/L)    ! Stability integral for heat with spray at delspr [-]
+    phisprH_zref   = stabIntSprayH(zref/L)    ! Stability integral for heat with spray at zref [-]
     thstar_pr = -(th_0 - th_1)*kappa/(LOG(z_1/z0t) - psiH_1)    ! theta flux scale without spray [K]
     qstar_pr  = -( q_0 -  q_1)*kappa/(LOG(z_1/z0q) - psiH_1)    ! q flux scale without spray [kg kg-1]
     G_S = rho_a*cp_a*kappa*ustar    ! Dimensional group for sensible heat [W m-2 K-1]
@@ -203,9 +235,9 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     tau = rho_a*ustar**2/gf    ! Bulk stress [Pa]
     H_S0pr = -G_S/kappa*thstar_pr    ! Bulk SHF without spray [W m-2]
     H_L0pr = -G_L/kappa*qstar_pr    ! Bulk LHF without spray [W m-2]
-    t_delsprD2pr = (th_0 - H_S0pr/G_S*(LOG(delspr/2./z0t) - psiH_delsprD2))*(p_delsprD2/1e5)**0.286   ! t at mid-layer w/o fdbk [K]
-    q_delsprD2pr =   q_0 - H_L0pr/G_L*(LOG(delspr/2./z0q) - psiH_delsprD2)    ! q at mid-layer w/o fdbk [kg kg-1]
-    s_delsprD2pr = satratio(t_delsprD2pr,p_delsprD2,q_delsprD2pr,0.99999)    ! s at mid-layer w/o fdbk [-]
+    t_zref_pr = (th_0 - H_S0pr/G_S*(LOG(zref/z0t) - psiH_zref))*(p_zref/1e5)**0.286   ! t at zref w/o fdbk [K]
+    q_zref_pr =   q_0 - H_L0pr/G_L*(LOG(zref/z0q) - psiH_zref)    ! q at zref w/o fdbk [kg kg-1]
+    s_zref_pr = satratio(t_zref_pr,p_zref,q_zref_pr,0.99999)    ! s at zref w/o fdbk [-]
     gamma_S = (LOG(delspr/z0t) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0t) - psiH_1)    ! Interfacial fdbk coeff for SHF [-]
     gamma_L = (LOG(delspr/z0q) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0q) - psiH_1)    ! Interfacial fdbk coeff for LHF [-]
 
@@ -279,26 +311,33 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
 
     ! 7. Calculate final diagnosed quantities ----------------------------------
     H_SNspr = H_Sspr - H_Rspr    ! Net spray sensible heat flux [W m-2]
-    dHS1spr = gamma_S*H_SNspr    ! Change to total SHF due to spray [W m-2]
-    dHL1spr = gamma_L*H_Lspr    ! Change to total LHF due to spray [W m-2]
+    dHS1_spr = gamma_S*H_SNspr    ! Change to total SHF due to spray [W m-2]
+    dHL1_spr = gamma_L*H_Lspr    ! Change to total LHF due to spray [W m-2]
+    dthstar_spr = -kappa/G_S*dHS1_spr    ! Change to thstar due to spray [K]
+    dqstar_spr  = -kappa/G_L*dHL1_spr    ! Change to qstar due to spray [kg kg-1]
     alpha_S = H_Sspr/H_Ssprpr    ! Feedback coefficient for H_Sspr [-]
     beta_S = H_Rspr/H_Rsprpr    ! Feedback coefficient for H_Rspr [-]
     beta_L = H_Lspr/H_Lsprpr    ! Feedback coefficient for H_Lspr [-]
-    H_S1 = H_S0pr + dHS1spr    ! Total SHF [W m-2]
-    H_L1 = H_L0pr + dHL1spr    ! Total LHF [W m-2]
+    H_S1 = H_S0pr + dHS1_spr    ! Total SHF [W m-2]
+    H_L1 = H_L0pr + dHL1_spr    ! Total LHF [W m-2]
     H_S0 = H_S1 - H_SNspr    ! Surface SHF (interfacial with feedback) [W m-2]
     H_L0 = H_L1 - H_Lspr    ! Surface LHF (interfacial with feedback) [W m-2]
-    t_delsprD2 = (th_0 - 1./G_S*(H_S0*(LOG(delspr/2./z0t) - psiH_delsprD2) &
-            + 0.5*(1. - phisprH_delsprD2)*H_SNspr))*(p_delsprD2/1e5)**0.286    ! t at mid-layer w/ fdbk [K]
-    q_delsprD2 =   q_0 - 1./G_L*(H_L0*(LOG(delspr/2./z0q) - psiH_delsprD2) &
-            + 0.5*(1. - phisprH_delsprD2)*H_Lspr)    ! q at mid-layer w/ fdbk [kg kg-1]
-    s_delsprD2 = satratio(t_delsprD2,p_delsprD2,q_delsprD2,0.99999)    ! s at mid-layer w/ fdbk [-]
-    delt_spr = t_delsprD2 - t_delsprD2pr    ! t change at mid-layer due to feedback [K], (+) = warming
-    delq_spr = q_delsprD2 - q_delsprD2pr    ! q change at mid-layer due to feedback [kg kg-1], (+) = moistening
-    dels_spr = s_delsprD2 - s_delsprD2pr    ! s change at mid-layer due to feedback [-], (+) = incr s
-    thstar_tot = -H_S1*kappa/G_S    ! theta flux scale with spray (based on total SHF) [K]
-    qstar_tot  = -H_L1*kappa/G_L    ! q flux scale with spray (based on total LHF) [kg kg-1]
-    thvstar = thstar_tot*(1. + 0.61*q_1) + 0.61*t_1*qstar_tot    ! thetav flux scale with spray [K]
+    IF (zref < delspr) THEN    ! zref is within spray layer
+        t_zref = (th_0 - 1./G_S*(H_S0*(LOG(zref/z0t) - psiH_zref) &
+                + zref/delspr*(1. - phisprH_zref)*H_SNspr))*(p_zref/1e5)**0.286    ! t at zref w/ fdbk [K]
+        q_zref =   q_0 - 1./G_L*(H_L0*(LOG(zref/z0q) - psiH_zref) &
+                + zref/delspr*(1. - phisprH_zref)*H_Lspr)    ! q at zref w/ fdbk [kg kg-1]
+    ELSE    ! zref is above spray layer
+        t_zref = (th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref))*(p_zref/1e5)**0.286    ! [K]
+        q_zref =   q_1 + H_L1/G_L*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [kg kg-1]
+    END IF
+    s_zref = satratio(t_zref,p_zref,q_zref,0.99999)    ! s at zref w/ fdbk [-]
+    dtref_spr = t_zref - t_zref_pr    ! t change at zref due to feedback [K], (+) = warming
+    dqref_spr = q_zref - q_zref_pr    ! q change at zref due to feedback [kg kg-1], (+) = moistening
+    dsref_spr = s_zref - s_zref_pr    ! s change at zref due to feedback [-], (+) = incr s
+    thstar = -H_S1*kappa/G_S    ! theta flux scale with spray (based on total SHF) [K]
+    qstar  = -H_L1*kappa/G_L    ! q flux scale with spray (based on total LHF) [kg kg-1]
+    thvstar = thstar*(1. + 0.61*q_1) + 0.61*t_1*qstar    ! thetav flux scale with spray [K]
 
 END IF
 

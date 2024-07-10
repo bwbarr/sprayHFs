@@ -23,12 +23,21 @@ The spray generation model is selected by providing one of the string keys above
 Spray heat fluxes change the total surface sensible and latent heat fluxes, as well as the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$ respectively, are
 
 ```math
-H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr}
+H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr} \: \: (1a)
 ```
 ```math
-H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr}
+H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr} \: \: (1b)
 ```
-Here $`H^{\prime}_S`$ and $`H^{\prime}_L`$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.
+Here $`H^{\prime}_S`$ and $`H^{\prime}_L`$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.  Equation (1a,b) can be written equivalently in terms of turbulent flux scales as follows:
+
+```math
+\theta* = \theta*^{\prime} + d\theta*_{spr} \: \: (2a)
+```
+```math
+q* = q*^{\prime} + dq*_{spr} \: \: (2b)
+```
+
+Here $\theta*$ and $q*$ are the total turbulent flux scales with spray for potential temperature $\theta$ and specific humidity $q$, respectively, and $`\theta*^{\prime}`$ and $`q*^{\prime}`$ are the same quantities without spray.  $d\theta*_{spr}$ and $dq*_{spr}$ are changes to $`\theta*^{\prime}`$ and $`q*^{\prime}`$ due to spray and are defined as $d\theta*_{spr} = -dH_{S,1,spr}/(\rho_a c_{p,a} u*)$ and $dq*_{spr} = -dH_{L,1,spr}/(\rho_a L_v u*)$, where $\rho_a$ is air density, $c_{p,a}$ is air specific heat at constant pressure, $u*$ is the friction velocity, and $L_v$ is the latent heat of vaporization of water.
 
 A user incorporates spray heat fluxes into an existing bulk surface layer code by calling subroutine `sprayHFs()` directly after the existing calculation of the bulk heat fluxes $`H^{\prime}_S`$ and $`H^{\prime}_L`$.  Implementing this call will likely involve passing additional fields (particularly surface wave properties) into the existing bulk model code.  `sprayHFs()` returns $dH_{S,1,spr}$ (variable name `dHS1spr`, units of $`W \, m^{-2}`$) and $dH_{L,1,spr}$ (variable name `dHL1spr`, units of $`W \, m^{-2}`$).  Then, the user adds $dH_{S,1,spr}$ to $`H^{\prime}_S`$ and $dH_{L,1,spr}$ to $`H^{\prime}_L`$ to get the total surface heat fluxes with spray.  Note that some models carry latent heat and moisture fluxes separately -- update moisture flux here too if necessary.  Finally, if the existing code does not calculate the Obukhov length $L$ directly from the modified $`H^{\prime}_S`$ and $`H^{\prime}_L`$ (for instance, $L$ may be calculated from a $`\theta_v*`$ (i.e., the turbulent flux scale for virtual potential temperature) that is computed in parallel to $`H^{\prime}_S`$ and $`H^{\prime}_L`$), the user must also correctly incorporate $dH_{S,1,spr}$ and $dH_{L,1,spr}$ into the calculation of $L$.  `sprayHFs()` outputs a calculation of $`\theta_v*`$ that includes spray heat fluxes for reference.  Note that `sprayHFs()` takes $L$ as an input.  The implicit relationship between $L$ and the calculated $dH_{S,1,spr}$ and $dH_{L,1,spr}$ should be treated the same way as in the existing bulk code, i.e., the $L$ passed to `sprayHFs()` should come from the previous model timestep or from the previous iteration if there is an internal loop for $L$ at each model timestep.
 
