@@ -165,10 +165,11 @@ REAL,PARAMETER :: Ms = 58.44    ! Molecular weight of salt [g mol-1]
 REAL,PARAMETER :: xs = 0.035    ! Mass fraction of salt in seawater [-]
 
 REAL :: Sg_1,ustar,U_10
-REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_zref,th_0,th_1,tC_1,&
-        k_a,nu_a,Dv_a,gammaWB
-REAL :: psiH_1,psiH_delspr,psiH_zref,phisprH_delspr,phisprH_zref,thstar_pr,&
-        qstar_pr,G_S,G_L,t_zref_pr,q_zref_pr,s_zref_pr
+REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_delsprD2,p_zref,th_0,&
+        th_1,tC_1,k_a,nu_a,Dv_a,gammaWB
+REAL :: psiH_1,psiH_delspr,psiH_delsprD2,psiH_zref,phisprH_delspr,phisprH_zref,thstar_pr,&
+        qstar_pr,G_S,G_L,t_delsprD2pr,t_zref_pr,q_delsprD2pr,q_zref_pr,&
+        s_delsprD2pr,s_zref_pr
 REAL :: zR,H_Sspr,H_Tsprpr,H_Ssprpr,H_Rsprpr,H_Lsprpr
 REAL :: etaT,Cs_pr,C_HIG,H_IG,Psi,Chi,Lambda,A,B,C,B2M4AC,s_hatPOS,H_Rspr_IG
 REAL :: H_S1,H_L1,H_S0,H_L0,t_zref,q_zref,s_zref,thstar,qstar
@@ -187,7 +188,7 @@ REAL,DIMENSION(25) :: v_g,dmdr0,tauf,Fp,tauT,zT
 
 ! 1. Check if U_10 >= sprayLB.  If so, perform spray calculations --------------
 Sg_1 = U_1*gf    ! Windspeed magnitude at z_1 including gustiness [m s-1]
-ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensity (not bulk friction velocity) [m s-1]
+ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensity (not bulk fric velocity) [m s-1]
 U_10 = ustar/kappa/gf*(LOG(10./z0) - stabIntM(10./L))    ! 10m windspeed [m s-1], gustiness removed
 IF (U_10 < sprayLB) THEN    ! Set returned fields to zero or dummy (999) values
 
@@ -211,9 +212,10 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1 - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
     q_0 = qsat0(t_0,p_0)*(1 + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
     tv_1 = t_1*(1+0.608*q_1)    ! Virtual temperature at z_1 [K]
-    rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density nominally at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
-    p_1    = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
-    p_zref = p_0 - rho_a*g*zref    ! Pressure at zref [Pa]
+    rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
+    p_1        = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
+    p_delsprD2 = p_0 - rho_a*g*delspr/2.    ! Pressure at delspr/2 [Pa]
+    p_zref     = p_0 - rho_a*g*zref    ! Pressure at zref [Pa]
     th_0 = t_0*(1e5/p_0)**0.286    ! Potential temperature at surface [K]
     th_1 = t_1*(1e5/p_1)**0.286    ! Potential temperature at z_1 [K]
     tC_1 = t_1 - 273.15    ! Convert t_1 to [C] for property calculations
@@ -223,9 +225,10 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     gammaWB = 240.97*17.502/(tC_1+240.97)**2    ! gamma = (dqsat/dT)/qsat [K-1], per Buck (1981)
 
     ! 3. Calculate fluxes w/o spray and some stability/feedback items ----------
-    psiH_1      = stabIntH(z_1/L)    ! Stability integral for heat at z_1 [-]
-    psiH_delspr = stabIntH(delspr/L)    ! Stability integral for heat at delspr [-]
-    psiH_zref   = stabIntH(zref/L)    ! Stability integral for heat at zref [-]
+    psiH_1        = stabIntH(z_1/L)    ! Stability integral for heat at z_1 [-]
+    psiH_delspr   = stabIntH(delspr/L)    ! Stability integral for heat at delspr [-]
+    psiH_delsprD2 = stabIntH(delspr/2./L)    ! Stability integral for heat at delspr/2 [-]
+    psiH_zref     = stabIntH(zref/L)    ! Stability integral for heat at zref [-]
     phisprH_delspr = stabIntSprayH(delspr/L)    ! Stability integral for heat with spray at delspr [-]
     phisprH_zref   = stabIntSprayH(zref/L)    ! Stability integral for heat with spray at zref [-]
     thstar_pr = -(th_0 - th_1)*kappa/(LOG(z_1/z0t) - psiH_1)    ! theta flux scale without spray [K]
@@ -235,11 +238,14 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     tau = rho_a*ustar**2/gf    ! Bulk stress [Pa]
     H_S0pr = -G_S/kappa*thstar_pr    ! Bulk SHF without spray [W m-2]
     H_L0pr = -G_L/kappa*qstar_pr    ! Bulk LHF without spray [W m-2]
-    t_zref_pr = (th_0 - H_S0pr/G_S*(LOG(zref/z0t) - psiH_zref))*(p_zref/1e5)**0.286   ! t at zref w/o fdbk [K]
-    q_zref_pr =   q_0 - H_L0pr/G_L*(LOG(zref/z0q) - psiH_zref)    ! q at zref w/o fdbk [kg kg-1]
-    s_zref_pr = satratio(t_zref_pr,p_zref,q_zref_pr,0.99999)    ! s at zref w/o fdbk [-]
-    gamma_S = (LOG(delspr/z0t) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0t) - psiH_1)    ! Interfacial fdbk coeff for SHF [-]
-    gamma_L = (LOG(delspr/z0q) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0q) - psiH_1)    ! Interfacial fdbk coeff for LHF [-]
+    t_delsprD2pr = (th_0 - H_S0pr/G_S*(LOG(delspr/2./z0t) - psiH_delsprD2))*(p_delsprD2/1e5)**0.286   ! t at mid-layer w/o fdbk [K]
+    t_zref_pr    = (th_0 - H_S0pr/G_S*(LOG(zref/z0t)      - psiH_zref    ))*(p_zref/1e5)**0.286   ! t at zref w/o fdbk [K]
+    q_delsprD2pr =   q_0 - H_L0pr/G_L*(LOG(delspr/2./z0q) - psiH_delsprD2)    ! q at mid-layer w/o fdbk [kg kg-1]
+    q_zref_pr    =   q_0 - H_L0pr/G_L*(LOG(zref/z0q)      - psiH_zref)    ! q at zref w/o fdbk [kg kg-1]
+    s_delsprD2pr = satratio(t_delsprD2pr,p_delsprD2,q_delsprD2pr,0.99999)    ! s at mid-layer w/o fdbk [-]
+    s_zref_pr    = satratio(t_zref_pr   ,p_zref    ,q_zref_pr   ,0.99999)    ! s at zref w/o fdbk [-]
+    gamma_S = (LOG(delspr/z0t) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0t) - psiH_1)    ! Interfacial SHF fdbk coeff [-]
+    gamma_L = (LOG(delspr/z0q) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0q) - psiH_1)    ! Interfacial LHF fdbk coeff [-]
 
     ! 4. Calculate spray generation and some droplet properties ----------------
     v_g = fall_velocity_PK97(r0)    ! Droplet settling velocity [m s-1]
@@ -376,9 +382,11 @@ REAL,INTENT(IN) :: zR,p_0,gammaWB,y0,t_0,rho_a,Dv_a,xs,delspr,z0t,z0q,L,th_0,&
 REAL,DIMENSION(25),INTENT(IN) :: r0,delta_r0,zT,tauf,tauT,Fp,dmdr0
 REAL,INTENT(OUT) :: H_Tspr
 
+INTEGER :: i
 REAL :: H_S0,H_L0,p_zR,t_zR,q_zR,qsat0_zR,betaWB_zR,s_zR
 REAL,DIMENSION(25) :: p_zT,t_zT,q_zT,qsat0_zT,betaWB_zT,s_zT,wetdep_zT,tWB_zT,&
-        tdropf,tauR,req,rf
+        tdropf,tauR,req,rf,stabIntH_z0tPzT,stabIntH_z0qPzT,stabIntSprayH_z0tPzT,&
+        stabIntSprayH_z0qPzT
 
 ! 1. Calculate surface heat fluxes (interfacial with feedback) using previous values of spray heat fluxes.
 !    If spray heat fluxes are zero, this gives the no-spray interfacial fluxes.
@@ -386,14 +394,22 @@ H_S0 = H_S0pr - (1. - gamma_S)*(H_Sspr - H_Rspr)    ! Surface SHF (interfacial w
 H_L0 = H_L0pr - (1. - gamma_L)*H_Lspr    ! Surface LHF (interfacial with feedback) [W m-2]
 
 ! 2. Get thermodynamic parameters for calculating H_Tspr
+DO i = 1,25
+    stabIntH_z0tPzT(i) = stabIntH((z0t+zT(i))/L)
+    stabIntH_z0qPzT(i) = stabIntH((z0q+zT(i))/L)
+    stabIntSprayH_z0tPzT(i) = stabIntSprayH((z0t+zT(i))/L)
+    stabIntSprayH_z0qPzT(i) = stabIntSprayH((z0q+zT(i))/L)
+END DO
 p_zT = p_0 - rho_a*g*zT    ! Pressure at zT [Pa]
-t_zT = (th_0 - 1./G_S*(H_S0*(LOG((z0t+zT)/z0t) - stabIntH((z0t+zT)/L)) &
-        + zT/delspr*(1. - stabIntSprayH((z0t+zT)/L))*(H_Sspr - H_Rspr)))*(p_zT/1e5)**0.286    ! Temp at zT [K]
-q_zT =   q_0 - 1./G_L*(H_L0*(LOG((z0q+zT)/z0q) - stabIntH((z0q+zT)/L)) &
-        + zT/delspr*(1. - stabIntSprayH((z0q+zT)/L))*H_Lspr)    ! Spec hum at zT [kg kg-1]
-qsat0_zT = qsat0(t_zT,p_zT)    ! Saturation specific humidity at zT [kg kg-1]
+t_zT = (th_0 - 1./G_S*(H_S0*(LOG((z0t+zT)/z0t) - stabIntH_z0tPzT) &
+        + zT/delspr*(1. - stabIntSprayH_z0tPzT)*(H_Sspr - H_Rspr)))*(p_zT/1e5)**0.286    ! Temp at zT [K]
+q_zT =   q_0 - 1./G_L*(H_L0*(LOG((z0q+zT)/z0q) - stabIntH_z0qPzT) &
+        + zT/delspr*(1. - stabIntSprayH_z0qPzT)*H_Lspr)    ! Spec hum at zT [kg kg-1]
+DO i = 1,25
+    qsat0_zT(i) = qsat0(t_zT(i),p_zT(i))    ! Saturation specific humidity at zT [kg kg-1]
+    s_zT(i) = satratio(t_zT(i),p_zT(i),q_zT(i),0.99999)    ! Saturation ratio at zT [-]
+END DO
 betaWB_zT = 1./(1. + Lv*gammaWB*(1. + y0)/cp_a*qsat0_zT)    ! Wetbulb coefficient at zT [-]
-s_zT = satratio(t_zT,p_zT,q_zT,0.99999)    ! Saturation ratio at zT [-]
 wetdep_zT = (1. - s_zT/(1. + y0))*(1. - betaWB_zT)/gammaWB    ! Wetbulb depression at zT [-]
 tWB_zT = t_zT - wetdep_zT    ! Wetbulb temperature at zT [K]
 tdropf = tWB_zT + (t_0 - tWB_zT)*EXP(-tauf/tauT)    ! Final droplet temperature [K]
@@ -410,7 +426,9 @@ s_zR = satratio(t_zR,p_zR,q_zR,0.99999)    ! Saturation ratio at zR [-]
 tauR = rho_sw*r0**2/(rho_a*Dv_a*Fp*qsat0_zR*betaWB_zR*ABS(1. + y0 - s_zR))    ! Char timescale for evap [s]
 req = r0*(xs*(1. + nu*Phi_s*Mw/Ms/(1. - s_zR)))**0.33333    ! Equilibrium radius at zR [m]
 rf = req + (r0 - req)*EXP(-tauf/tauR)    ! Final droplet radius [m]
-where(ABS(1. + y0 - s_zR) < 1.e-3) rf = r0    ! Assume no change if s_zR ~ 1 + y0
+IF (ABS(1. + y0 - s_zR) < 1.e-3) THEN
+    rf = r0    ! Assume no change if s_zR ~ 1 + y0
+END IF
 
 ! 4. Calculate updated spray heat fluxes using new thermodynamic parameters
 H_Tspr = DOT_PRODUCT(cp_sw*(t_0 - tdropf)*dmdr0,delta_r0)    ! Spray HF due to temp change [W m-2]
@@ -554,11 +572,11 @@ DO i = 1,25
                               + B3*LOG10(r80(i))**3 &
                               + B4*LOG10(r80(i))**4)
     ELSE IF ((r80(i) >= 15.) .AND. (r80(i) < 37.5)) THEN
-        dFdr80(i) = C1*r80(i)**-1
+        dFdr80(i) = C1*r80(i)**(-1)
     ELSE IF ((r80(i) >= 37.5) .AND. (r80(i) < 100.)) THEN
-        dFdr80(i) = C2*r80(i)**-2.8
+        dFdr80(i) = C2*r80(i)**(-2.8)
     ELSE IF ((r80(i) >= 100.) .AND. (r80(i) < 250.)) THEN
-        dFdr80(i) = C3*r80(i)**-8
+        dFdr80(i) = C3*r80(i)**(-8)
     ELSE IF (r80(i) >= 250.) THEN
         dFdr80(i) = 0.0
     END IF
@@ -566,7 +584,7 @@ END DO
 
 ! Convert to mass SSGF using the selected whitecap fraction.
 ! dFdr0_11ms used to have a bug where r0 was mistakenly used instead of r0_micrometers -- BWB 240612
-dFdr0_11ms = dFdr80*0.506*r0_micrometers**-0.024    ! A92 source function at 11 m/s, based on r0 [m-2 s-1 um-1]
+dFdr0_11ms = dFdr80*0.506*r0_micrometers**(-0.024)    ! A92 source function at 11 m/s, based on r0 [m-2 s-1 um-1]
 IF (Wform == 'MOM80') THEN
     WC_A92_11ms = whitecap_MOM80(11.)    ! Whitecap fraction of A92 source function at 11 m/s [-]
     WC = whitecap_MOM80(U_10)    ! Whitecap fraction at input U_10 [-]
@@ -659,23 +677,23 @@ FUNCTION stabIntM(zeta) RESULT(psiM)
 REAL,INTENT(IN) :: zeta
 REAL :: psiM,Xk,psik,Xc,psic,f,am,bm,BBm,X
 
-IF (zeta == 0) THEN    ! Neutral
-    psiM = 0
-ELSE IF (zeta < 0) THEN    ! Unstable
-    Xk = (1 - 16*zeta)**0.25    ! For small negative zeta
-    psik = 2*LOG((1 + Xk)/2) + LOG((1 + Xk**2)/2) - 2*ATAN(Xk) + 2*ATAN(1)
-    Xc = (1 - 10.15*zeta)**(1/3)    ! For large negative zeta
-    psic = 1.5*LOG((1 + Xc + Xc**2)/3) - SQRT(3)*ATAN((1 + 2*Xc)/SQRT(3)) + 4*ATAN(1)/SQRT(3)
-    f = zeta**2/(1 + zeta**2)
-    psiM = (1 - f)*psik + f*psic
-ELSE IF (zeta > 0) THEN    ! Stable (Grachev 2007, Eq. 12)
-    am = 5
+IF (zeta == 0.) THEN    ! Neutral
+    psiM = 0.
+ELSE IF (zeta < 0.) THEN    ! Unstable
+    Xk = (1. - 16.*zeta)**0.25    ! For small negative zeta
+    psik = 2.*LOG((1. + Xk)/2.) + LOG((1. + Xk**2)/2.) - 2.*ATAN(Xk) + 2.*ATAN(1.)
+    Xc = (1. - 10.15*zeta)**0.33333    ! For large negative zeta
+    psic = 1.5*LOG((1. + Xc + Xc**2)/3.) - SQRT(3.)*ATAN((1. + 2.*Xc)/SQRT(3.)) + 4.*ATAN(1.)/SQRT(3.)
+    f = zeta**2/(1. + zeta**2)
+    psiM = (1. - f)*psik + f*psic
+ELSE IF (zeta > 0.) THEN    ! Stable (Grachev 2007, Eq. 12)
+    am = 5.
     bm = am/6.5
-    BBm = ((1-bm)/bm)**(1/3)
-    X = (1 + zeta)**(1/3)
-    psiM = -(3*am/bm)*(X-1) + ((am*BBm)/(2*bm))*(2*LOG((BBm+X)/(BBm+1)) - &
-        LOG((BBm**2-BBm*X+X**2)/(BBm**2-BBm+1)) + 2*SQRT(3)*ATAN((2*X-BBm)/(BBm*SQRT(3))) - &
-        2*SQRT(3)*ATAN((2-BBm)/(BBm*SQRT(3))))
+    BBm = ((1.-bm)/bm)**0.33333
+    X = (1. + zeta)**0.33333
+    psiM = -(3.*am/bm)*(X-1.) + ((am*BBm)/(2.*bm))*(2.*LOG((BBm+X)/(BBm+1.)) - &
+        LOG((BBm**2-BBm*X+X**2)/(BBm**2-BBm+1.)) + 2.*SQRT(3.)*ATAN((2.*X-BBm)/(BBm*SQRT(3.))) - &
+        2.*SQRT(3.)*ATAN((2.-BBm)/(BBm*SQRT(3.))))
 END IF
 
 END FUNCTION
@@ -699,22 +717,22 @@ FUNCTION stabIntH(zeta) RESULT(psiH)
 REAL,INTENT(IN) :: zeta
 REAL :: psiH,Yk,psik,Yc,psic,f,a,b,c,BB
 
-IF (zeta == 0) THEN    ! Neutral
-    psiH = 0
-ELSE IF (zeta < 0) THEN    ! Unstable
-    Yk = (1 - 16*zeta)**0.5    ! For small negative zeta
-    psik = 2*LOG((1 + Yk)/2)
-    Yc = (1 - 34.15*zeta)**(1/3)    ! For large negative zeta
-    psic = 1.5*LOG((1 + Yc + Yc**2)/3) - SQRT(3)*ATAN((1 + 2*Yc)/SQRT(3)) + 4*ATAN(1)/SQRT(3)
-    f = zeta**2/(1 + zeta**2)
-    psiH = (1 - f)*psik + f*psic
-ELSE IF (zeta > 0) THEN    ! Stable (Grachev 2007, Eq. 13)
-    a = 5
-    b = 5
-    c = 3
-    BB = SQRT(c**2 - 4)
-    psiH = -(b/2)*LOG(1+c*zeta+zeta**2) + \
-        (((b*c)/(2*BB))-(a/BB))*(LOG((2*zeta+c-BB)/(2*zeta+c+BB))-LOG((c-BB)/(c+BB)))
+IF (zeta == 0.) THEN    ! Neutral
+    psiH = 0.
+ELSE IF (zeta < 0.) THEN    ! Unstable
+    Yk = (1. - 16.*zeta)**0.5    ! For small negative zeta
+    psik = 2.*LOG((1. + Yk)/2.)
+    Yc = (1. - 34.15*zeta)**0.33333    ! For large negative zeta
+    psic = 1.5*LOG((1. + Yc + Yc**2)/3.) - SQRT(3.)*ATAN((1. + 2.*Yc)/SQRT(3.)) + 4.*ATAN(1.)/SQRT(3.)
+    f = zeta**2/(1. + zeta**2)
+    psiH = (1. - f)*psik + f*psic
+ELSE IF (zeta > 0.) THEN    ! Stable (Grachev 2007, Eq. 13)
+    a = 5.
+    b = 5.
+    c = 3.
+    BB = SQRT(c**2 - 4.)
+    psiH = -(b/2.)*LOG(1.+c*zeta+zeta**2) + \
+        (((b*c)/(2.*BB))-(a/BB))*(LOG((2.*zeta+c-BB)/(2.*zeta+c+BB))-LOG((c-BB)/(c+BB)))
 END IF
 
 END FUNCTION
@@ -739,13 +757,13 @@ FUNCTION stabIntSprayH(zeta) RESULT(phisprH)
 REAL,INTENT(IN) :: zeta
 REAL :: phisprH,Y
 
-IF (zeta == 0) THEN    ! Neutral
-    phisprH = 0
-ELSE IF (zeta > 0) THEN    ! Stable
+IF (zeta == 0.) THEN    ! Neutral
+    phisprH = 0.
+ELSE IF (zeta > 0.) THEN    ! Stable
     phisprH = -2.5*zeta
-ELSE IF (zeta < 0) THEN    ! Unstable
-    Y = (1 - 16*zeta)**0.5
-    phisprH = -(Y - 1)**2/16/zeta
+ELSE IF (zeta < 0.) THEN    ! Unstable
+    Y = (1. - 16.*zeta)**0.5
+    phisprH = -(Y - 1.)**2/16./zeta
 END IF
 
 END FUNCTION
@@ -846,7 +864,7 @@ REAL,PARAMETER :: g = 9.81    ! Acceleration due to gravity [m s-2]
 REAL,PARAMETER :: sigma_aw = 7.4e-2    ! Surface tension of air-water interface [N m-1]
 REAL,PARAMETER :: lamda_a0 = 6.6e-8    ! Mean free path at 1013.25 mb, 293.15 K [m]
 REAL,DIMENSION(7) :: B1 = (/ -0.318657e1, 0.992696, -0.153193e-2, -0.987059e-3, &
-        -0.578878e-3, 0.855176e-4, -0.327815e-5 \)    ! Polynomial coeffs for 10 <= r <= 535 um [-]
+        -0.578878e-3, 0.855176e-4, -0.327815e-5 /)    ! Polynomial coeffs for 10 <= r <= 535 um [-]
 REAL,DIMENSION(6) :: B2 = (/ -0.500015e1, 0.523778e1, -0.204914e1, 0.475294, &
         -0.542819e-1, 0.238449e-2 /)    ! Polynomial coefficients for r > 535 um [-]
 INTEGER :: i
