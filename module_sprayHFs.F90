@@ -127,7 +127,7 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !-------------------------------------------------------------------------------
 
 REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,z_ref
-CHARACTER(LEN=100),INTENT(IN) :: whichSSGF
+CHARACTER(LEN=*),INTENT(IN) :: whichSSGF
 REAL,INTENT(OUT) :: dHS1_spr
 REAL,INTENT(OUT) :: dHL1_spr
 REAL,INTENT(OUT) :: dthstar_spr
@@ -158,7 +158,7 @@ REAL,PARAMETER :: rho_sw = 1030.    ! Density of seawater [kg m-3]
 REAL,PARAMETER :: rho_dry = 2160.    ! Density of chrystalline salt [kg m-3]
 REAL,PARAMETER :: cp_sw = 4200.    ! Specific heat capacity of seawater [J kg-1 K-1]
 REAL,PARAMETER :: cp_a = 1004.67    ! Specific heat capacity of air [J kg-1 K-1]
-REAL,PARAMETER :: nu = 2    ! Number of ions into which NaCl dissociates [-]
+REAL,PARAMETER :: nu = 2.    ! Number of ions into which NaCl dissociates [-]
 REAL,PARAMETER :: Phi_s = 0.924    ! Practical osmotic coefficient at molality of 0.6 [-]
 REAL,PARAMETER :: Mw = 18.02    ! Molecular weight of water [g mol-1]
 REAL,PARAMETER :: Ms = 58.44    ! Molecular weight of salt [g mol-1]
@@ -208,16 +208,16 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     ELSE
         zref = z_ref
     END IF
-    rdryBYr0 = (xs*rho_sw/rho_dry)**(1/3)    ! Ratio of dry salt radius to r0 [-]
-    y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1 - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
-    q_0 = qsat0(t_0,p_0)*(1 + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
-    tv_1 = t_1*(1+0.608*q_1)    ! Virtual temperature at z_1 [K]
+    rdryBYr0 = (xs*rho_sw/rho_dry)**0.33333    ! Ratio of dry salt radius to r0 [-]
+    y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1. - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
+    q_0 = qsat0(t_0,p_0)*(1. + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
+    tv_1 = t_1*(1.+0.608*q_1)    ! Virtual temperature at z_1 [K]
     rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
     p_1        = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
     p_delsprD2 = p_0 - rho_a*g*delspr/2.    ! Pressure at delspr/2 [Pa]
     p_zref     = p_0 - rho_a*g*zref    ! Pressure at zref [Pa]
-    th_0 = t_0*(1e5/p_0)**0.286    ! Potential temperature at surface [K]
-    th_1 = t_1*(1e5/p_1)**0.286    ! Potential temperature at z_1 [K]
+    th_0 = t_0*(1.e5/p_0)**0.286    ! Potential temperature at surface [K]
+    th_1 = t_1*(1.e5/p_1)**0.286    ! Potential temperature at z_1 [K]
     tC_1 = t_1 - 273.15    ! Convert t_1 to [C] for property calculations
     k_a = 2.411e-2*(1.+3.309e-3*tC_1-1.441e-6*tC_1**2)    ! Thermal conductivity of air [W m-1 K-1]
     nu_a = 1.326e-5*(1.+6.542e-3*tC_1+8.301e-6*tC_1**2-4.84e-9*tC_1**3)    ! Kin visc of air [m2 s-1]
@@ -238,8 +238,8 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     tau = rho_a*ustar**2/gf    ! Bulk stress [Pa]
     H_S0pr = -G_S/kappa*thstar_pr    ! Bulk SHF without spray [W m-2]
     H_L0pr = -G_L/kappa*qstar_pr    ! Bulk LHF without spray [W m-2]
-    t_delsprD2pr = (th_0 - H_S0pr/G_S*(LOG(delspr/2./z0t) - psiH_delsprD2))*(p_delsprD2/1e5)**0.286   ! t at mid-layer w/o fdbk [K]
-    t_zref_pr    = (th_0 - H_S0pr/G_S*(LOG(zref/z0t)      - psiH_zref    ))*(p_zref/1e5)**0.286   ! t at zref w/o fdbk [K]
+    t_delsprD2pr = (th_0 - H_S0pr/G_S*(LOG(delspr/2./z0t) - psiH_delsprD2))*(p_delsprD2/1.e5)**0.286   ! t at mid-layer w/o fdbk [K]
+    t_zref_pr    = (th_0 - H_S0pr/G_S*(LOG(zref/z0t)      - psiH_zref    ))*(p_zref/1.e5)**0.286   ! t at zref w/o fdbk [K]
     q_delsprD2pr =   q_0 - H_L0pr/G_L*(LOG(delspr/2./z0q) - psiH_delsprD2)    ! q at mid-layer w/o fdbk [kg kg-1]
     q_zref_pr    =   q_0 - H_L0pr/G_L*(LOG(zref/z0q)      - psiH_zref)    ! q at zref w/o fdbk [kg kg-1]
     s_delsprD2pr = satratio(t_delsprD2pr,p_delsprD2,q_delsprD2pr,0.99999)    ! s at mid-layer w/o fdbk [-]
@@ -330,11 +330,11 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     H_L0 = H_L1 - H_Lspr    ! Surface LHF (interfacial with feedback) [W m-2]
     IF (zref < delspr) THEN    ! zref is within spray layer
         t_zref = (th_0 - 1./G_S*(H_S0*(LOG(zref/z0t) - psiH_zref) &
-                + zref/delspr*(1. - phisprH_zref)*H_SNspr))*(p_zref/1e5)**0.286    ! t at zref w/ fdbk [K]
+                + zref/delspr*(1. - phisprH_zref)*H_SNspr))*(p_zref/1.e5)**0.286    ! t at zref w/ fdbk [K]
         q_zref =   q_0 - 1./G_L*(H_L0*(LOG(zref/z0q) - psiH_zref) &
                 + zref/delspr*(1. - phisprH_zref)*H_Lspr)    ! q at zref w/ fdbk [kg kg-1]
     ELSE    ! zref is above spray layer
-        t_zref = (th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref))*(p_zref/1e5)**0.286    ! [K]
+        t_zref = (th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref))*(p_zref/1.e5)**0.286    ! [K]
         q_zref =   q_1 + H_L1/G_L*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [kg kg-1]
     END IF
     s_zref = satratio(t_zref,p_zref,q_zref,0.99999)    ! s at zref w/ fdbk [-]
@@ -402,7 +402,7 @@ DO i = 1,25
 END DO
 p_zT = p_0 - rho_a*g*zT    ! Pressure at zT [Pa]
 t_zT = (th_0 - 1./G_S*(H_S0*(LOG((z0t+zT)/z0t) - stabIntH_z0tPzT) &
-        + zT/delspr*(1. - stabIntSprayH_z0tPzT)*(H_Sspr - H_Rspr)))*(p_zT/1e5)**0.286    ! Temp at zT [K]
+        + zT/delspr*(1. - stabIntSprayH_z0tPzT)*(H_Sspr - H_Rspr)))*(p_zT/1.e5)**0.286    ! Temp at zT [K]
 q_zT =   q_0 - 1./G_L*(H_L0*(LOG((z0q+zT)/z0q) - stabIntH_z0qPzT) &
         + zT/delspr*(1. - stabIntSprayH_z0qPzT)*H_Lspr)    ! Spec hum at zT [kg kg-1]
 DO i = 1,25
@@ -417,7 +417,7 @@ tdropf = tWB_zT + (t_0 - tWB_zT)*EXP(-tauf/tauT)    ! Final droplet temperature 
 ! 3. Get thermodynamic parameters for calculating H_Rspr
 p_zR = p_0 - rho_a*g*zR    ! Pressure at zR [Pa]
 t_zR = (th_0 - 1./G_S*(H_S0*(LOG((z0t+zR)/z0t) - stabIntH((z0t+zR)/L)) &
-        + zR/delspr*(1. - stabIntSprayH((z0t+zR)/L))*(H_Sspr - H_Rspr)))*(p_zR/1e5)**0.286    ! Temp at zR [K]
+        + zR/delspr*(1. - stabIntSprayH((z0t+zR)/L))*(H_Sspr - H_Rspr)))*(p_zR/1.e5)**0.286    ! Temp at zR [K]
 q_zR =   q_0 - 1./G_L*(H_L0*(LOG((z0q+zR)/z0q) - stabIntH((z0q+zR)/L)) &
         + zR/delspr*(1. - stabIntSprayH((z0q+zR)/L))*H_Lspr)    ! Spec hum at zR [kg kg-1]
 qsat0_zR = qsat0(t_zR,p_zR)    ! Saturation specific humidity at zR [kg kg-1]
@@ -559,18 +559,18 @@ REAL :: WC_A92_11ms,WC,fs
 REAL,DIMENSION(25) :: r0_micrometers,r80,dFdr80,dFdr0_11ms,dFdr0_perWC,&
         dVdr0_perWC
 
-r0_micrometers = r0*1e6    ! [um]
+r0_micrometers = r0*1.e6    ! [um]
 r80 = 0.518*r0_micrometers**0.976    ! Equilibrium radius at 80% RH [um], per Fitzgerald (1975)
 
 ! Define the A92 number source function at 11 m s-1, based on r80 [m-2 s-1 um-1]
 DO i = 1,25
     IF (r80(i) < 0.8) THEN
-        dFdr80(i) = 0.0
+        dFdr80(i) = 0.
     ELSE IF ((r80(i) >= 0.8) .AND. (r80(i) < 15.)) THEN
-        dFdr80(i) = 10.0**(B0 + B1*LOG10(r80(i)) &
-                              + B2*LOG10(r80(i))**2 &
-                              + B3*LOG10(r80(i))**3 &
-                              + B4*LOG10(r80(i))**4)
+        dFdr80(i) = 10.**(B0 + B1*LOG10(r80(i)) &
+                             + B2*LOG10(r80(i))**2 &
+                             + B3*LOG10(r80(i))**3 &
+                             + B4*LOG10(r80(i))**4)
     ELSE IF ((r80(i) >= 15.) .AND. (r80(i) < 37.5)) THEN
         dFdr80(i) = C1*r80(i)**(-1)
     ELSE IF ((r80(i) >= 37.5) .AND. (r80(i) < 100.)) THEN
@@ -578,7 +578,7 @@ DO i = 1,25
     ELSE IF ((r80(i) >= 100.) .AND. (r80(i) < 250.)) THEN
         dFdr80(i) = C3*r80(i)**(-8)
     ELSE IF (r80(i) >= 250.) THEN
-        dFdr80(i) = 0.0
+        dFdr80(i) = 0.
     END IF
 END DO
 
@@ -594,7 +594,7 @@ ELSE IF (Wform == 'BCF23') THEN
     WC = whitecap_BCF23wind(U_10)    ! Whitecap fraction at input U_10 [-]
     fs = 3.1    ! SSGF scaling factor [-].  3.1 used instead of 2.2 to correct earlier bug in dFdr0_11ms.
 END IF
-dFdr0_perWC = dFdr0_11ms/WC_A92_11ms*1e6    ! F94 number source function per unit whitecap area [m-2 s-1 m-1]
+dFdr0_perWC = dFdr0_11ms/WC_A92_11ms*1.e6    ! F94 number source function per unit whitecap area [m-2 s-1 m-1]
 dVdr0_perWC = dFdr0_perWC*1.33333*PI*r0**3    ! F94 volume source function per unit whitecap area [m3 m-2 s-1 m-1]
 dmdr0 = fs*rho_w*dVdr0_perWC*WC    ! F94 mass source function [kg m-2 s-1 m-1]
 
@@ -624,7 +624,7 @@ FUNCTION qsat0(t,p) RESULT(q_sat0)
 REAL,INTENT(IN) :: t,p
 REAL :: e_sat0,q_sat0
 
-e_sat0 = 6.1121*EXP(17.502*(t - 273.15)/(t - 273.15 + 240.97))*(1.0007 + 3.46e-8*p)*1e2    ! Sat vap press [Pa]
+e_sat0 = 6.1121*EXP(17.502*(t - 273.15)/(t - 273.15 + 240.97))*(1.0007 + 3.46e-8*p)*1.e2    ! Sat vap press [Pa]
 q_sat0 = e_sat0*0.622/(p - 0.378*e_sat0)    ! Saturation specific humidity [kg kg-1]
 
 END FUNCTION
@@ -885,11 +885,11 @@ DO i = 1,25
     ELSE IF (r(i) > 535.e-6) THEN    ! For r > 535 micrometers
         NBo = g*(rho_w - rho_a)*r(i)**2/sigma_aw    ! Bond number [-]
         NP = sigma_aw**3/rho_a**2/nu_a**4/g/(rho_w - rho_a)    ! Physical property number [-]
-        NBoNP16 = NBo*NP**(1./6.)    ! Product of Bond number and physical property number to the 1/6 power [-]
+        NBoNP16 = NBo*NP**0.16666    ! Product of Bond number and physical property number to the 1/6 power [-]
         X = LOG(16./3.*NBoNP16)    ! X in polynomial curve fit [-]
         Y = B2(1) + B2(2)*X + B2(3)*X**2 + B2(4)*X**3 + B2(5)*X**4 + &
             B2(6)*X**5    ! Y in polynomial curve fit [-]
-        NRe = NP**(1./6.)*EXP(Y)    ! Reynolds number [-]
+        NRe = NP**0.16666*EXP(Y)    ! Reynolds number [-]
         v_fall(i) = nu_a*NRe/2./r(i)    ! Settling velocity [m s-1]
     END IF
 END DO
