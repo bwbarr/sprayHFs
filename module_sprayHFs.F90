@@ -13,6 +13,7 @@ PUBLIC :: stabIntSprayH
 PUBLIC :: whitecapActive_DLM17
 PUBLIC :: whitecap_MOM80
 PUBLIC :: whitecap_BCF23wind
+PUBLIC :: waveProps
 PUBLIC :: fall_velocity_PK97
 
 !===============================================================================
@@ -35,17 +36,19 @@ CONTAINS
 !===============================================================================
 
 SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
-               z_ref,whichSSGF,dHS1_spr,dHL1_spr,dthstar_spr,dqstar_spr,&
-               dtref_spr,dqref_spr,dsref_spr,tau,H_S0pr,H_L0pr,thvstar,M_spr,&
-               H_Tspr,H_Rspr,H_SNspr,H_Lspr,alpha_S,beta_S,beta_L,gamma_S,&
-               gamma_L)
+               z_ref,whichSSGF,paramWaves,dHS1_spr,dHL1_spr,dthstar_spr,&
+               dqstar_spr,dthvstar_spr,dthref_spr,dtref_spr,dqref_spr,dsref_spr,&
+               tau,H_S0pr,H_L0pr,M_spr,H_Tspr,H_Rspr,H_SNspr,H_Lspr,alpha_S,&
+               beta_S,beta_L,gamma_S,gamma_L)
 
 !-------------------------------------------------------------------------------
 !
 ! Subroutine to calculate spray modifications to heat fluxes and surface layer 
 ! properties.  Implemented per Barr et al. (2023) (hereafter BCF23).  Heat 
 ! fluxes from the ocean to the atmosphere are defined as positive, and momentum
-! fluxes (stress) from the atmosphere to the ocean are defined as positive.
+! fluxes (stress) from the atmosphere to the ocean are defined as positive.  
+! Positive heat fluxes correspond to negative values of the turbulent flux 
+! scales thstar, qstar, and thvstar.
 !
 ! Inputs:
 !     z_1 - height of lowest atmospheric model mass level [m]
@@ -83,27 +86,34 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !         'F94_MOM80': widely used F94 wind-based SSGF, using original whitecap 
 !             fraction per Monahan and O'Muircheartaigh (1980).
 !         'F94_BCF23': updated F94 wind-based SSGF given as BCF23 Eq. 3.
+!     paramWaves - True to parameterize wave processes, False to use input values
+!         for wave properties (eps, dcp, swh, mss).  If True, dummy values
+!         (e.g., zeroes) should be passed in the subroutine call for all four
+!         wave properties.  If False, externally-defined values (e.g., from a 
+!         wave model) should be passed in the subroutine call.
 ! Outputs:
 !     dHS1_spr - change to total surface sensible heat flux due to spray [W m-2]
 !     dHL1_spr - change to total surface latent heat flux due to spray [W m-2]
 !     dthstar_spr - change to total theta flux scale due to spray [K]
 !     dqstar_spr - change to total q flux scale due to spray [kg kg-1]
+!     dthvstar_spr - change to total thetav (i.e., buoyancy) flux scale due to 
+!         spray [K]
+!     dthref_spr - change to potential temperature at user-specified reference
+!         height due to spray heat flux feedback [K], (+) = warming
 !     dtref_spr - change to temperature at user-specified reference height due 
 !         to spray heat flux feedback [K], (+) = warming
 !     dqref_spr - change to q at user-specified reference height due to spray 
 !         heat flux feedback [kg kg-1], (+) = moistening
 !     dsref_spr - change to saturation ratio at user-specified reference height 
 !         due to spray heat flux feedback [-], (+) = s increases
-!     tau - bulk stress [Pa].  Ideally, should be equal to bulk stress from
-!         existing bulk code.
-!     H_S0pr - bulk SHF without spray [W m-2].  Ideally, should be equal to bulk
-!         SHF from existing bulk code.
-!     H_L0pr - bulk LHF without spray [W m-2].  Ideally, should be equal to bulk
-!         LHF from existing bulk code.
-!     thvstar - turbulent flux scale for virtual potential temperature [K], 
-!         based on total fluxes (interfacial + spray with feedback).  This is 
-!         included for reference/comparison in case the existing bulk algorithm
-!         calculates L from its own computation of thvstar.
+!     tau - bulk stress [Pa].  Provided for comparison to bulk stress from 
+!         existing bulk code.  Should not be used to override existing bulk stress.
+!     H_S0pr - bulk SHF without spray [W m-2].  Provided for comparison to bulk
+!         SHF from existing code.  Should not be used to override existing bulk
+!         SHF.
+!     H_L0pr - bulk LHF without spray [W m-2].  Provided for comparison to bulk
+!         LHF from existing code.  Should not be used to override existing bulk
+!         LHF.
 !     M_spr - spray generated mass flux [kg m-2 s-1]
 !     H_Tspr - spray heat flux due to temperature change [W m-2].  This is
 !         exactly equal to the spray enthalpy flux, H_Kspr.  H_Kspr is not a 
@@ -126,19 +136,22 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !
 !-------------------------------------------------------------------------------
 
-REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,z_ref
+REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,L,z0,z0t,z0q,z_ref
 CHARACTER(LEN=*),INTENT(IN) :: whichSSGF
+LOGICAL,INTENT(IN) :: paramWaves
+REAL,INTENT(INOUT) :: eps,dcp,swh,mss
 REAL,INTENT(OUT) :: dHS1_spr
 REAL,INTENT(OUT) :: dHL1_spr
 REAL,INTENT(OUT) :: dthstar_spr
 REAL,INTENT(OUT) :: dqstar_spr
+REAL,INTENT(OUT) :: dthvstar_spr
+REAL,INTENT(OUT) :: dthref_spr
 REAL,INTENT(OUT) :: dtref_spr
 REAL,INTENT(OUT) :: dqref_spr
 REAL,INTENT(OUT) :: dsref_spr
 REAL,INTENT(OUT) :: tau
 REAL,INTENT(OUT) :: H_S0pr
 REAL,INTENT(OUT) :: H_L0pr
-REAL,INTENT(OUT) :: thvstar
 REAL,INTENT(OUT) :: M_spr
 REAL,INTENT(OUT) :: H_Tspr
 REAL,INTENT(OUT) :: H_Rspr
@@ -168,11 +181,11 @@ REAL :: Sg_1,ustar,U_10
 REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_delsprD2,p_zref,th_0,&
         th_1,tC_1,k_a,nu_a,Dv_a,gammaWB
 REAL :: psiH_1,psiH_delspr,psiH_delsprD2,psiH_zref,phisprH_delspr,phisprH_zref,thstar_pr,&
-        qstar_pr,G_S,G_L,t_delsprD2pr,t_zref_pr,q_delsprD2pr,q_zref_pr,&
+        qstar_pr,G_S,G_L,t_delsprD2pr,th_zref_pr,t_zref_pr,q_delsprD2pr,q_zref_pr,&
         s_delsprD2pr,s_zref_pr
 REAL :: zR,H_Sspr,H_Tsprpr,H_Ssprpr,H_Rsprpr,H_Lsprpr
 REAL :: etaT,Cs_pr,C_HIG,H_IG,Psi,Chi,Lambda,A,B,C,B2M4AC,s_hatPOS,H_Rspr_IG
-REAL :: H_S1,H_L1,H_S0,H_L0,t_zref,q_zref,s_zref,thstar,qstar
+REAL :: H_S1,H_L1,H_S0,H_L0,th_zref,t_zref,q_zref,s_zref,thstar,qstar,thvstar_pr,thvstar
 CHARACTER(LEN=100) :: Wform
 
 ! Droplet radius vector [m]
@@ -192,9 +205,9 @@ ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensi
 U_10 = ustar/kappa/gf*(LOG(10./z0) - stabIntM(10./L))    ! 10m windspeed [m s-1], gustiness removed
 IF (U_10 < sprayLB) THEN    ! Set returned fields to zero or dummy (999) values
 
-    dHS1_spr = 0.; dHL1_spr = 0.; dthstar_spr = 0.; dqstar_spr = 0.
-    dtref_spr = 0.; dqref_spr = 0.; dsref_spr = 0.
-    thvstar = 999.; tau = 999.; H_S0pr = 999.; H_L0pr = 999.; M_spr = 999.
+    dHS1_spr = 0.; dHL1_spr = 0.; dthstar_spr = 0.; dqstar_spr = 0.; dthvstar_spr = 0.;
+    dthref_spr = 0.; dtref_spr = 0.; dqref_spr = 0.; dsref_spr = 0.
+    tau = 999.; H_S0pr = 999.; H_L0pr = 999.; M_spr = 999.
     H_Tspr = 999.; H_Rspr = 999.; H_SNspr = 999.; H_Lspr = 999.
     alpha_S = 999.; beta_S = 999.; beta_L = 999.; gamma_S = 999.; gamma_L = 999.
 
@@ -202,17 +215,20 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
 
     ! 2. Get properties and environmental variables ----------------------------
     Lv = (2.501-0.00237*(t_0-273.15))*1e6    ! Latent heat of vap for water [J kg-1]
+    rdryBYr0 = (xs*rho_sw/rho_dry)**0.33333    ! Ratio of dry salt radius to r0 [-]
+    y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1. - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
+    q_0 = qsat0(t_0,p_0)*(1. + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
+    tv_1 = t_1*(1.+0.608*q_1)    ! Virtual temperature at z_1 [K]
+    rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
+    IF (paramWaves) THEN    ! Parameterize eps, dcp, swh, and mss
+        CALL waveProps(U_10,ustar/gf**0.5,rho_a,eps,dcp,swh,mss)    ! Uses bulk friction velocity without gustiness
+    END IF
     delspr = MIN(swh,z_1)    ! Spray layer thickness [m], nominally one swh per M&V2014a.  Limited to z_1.
     IF (z_ref < 0.) THEN    ! Set reference height to user-defined value or mid-spray layer height
         zref = delspr/2.
     ELSE
         zref = z_ref
     END IF
-    rdryBYr0 = (xs*rho_sw/rho_dry)**0.33333    ! Ratio of dry salt radius to r0 [-]
-    y0 = -nu*Phi_s*Mw/Ms*rho_dry/rho_sw*rdryBYr0**3/(1. - rho_dry/rho_sw*rdryBYr0**3)    ! y for surface seawater [-]
-    q_0 = qsat0(t_0,p_0)*(1. + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
-    tv_1 = t_1*(1.+0.608*q_1)    ! Virtual temperature at z_1 [K]
-    rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
     p_1        = p_0 - rho_a*g*z_1    ! Pressure at z_1 [Pa].  All pressure adjustments assume hydrostatic gradient.
     p_delsprD2 = p_0 - rho_a*g*delspr/2.    ! Pressure at delspr/2 [Pa]
     p_zref     = p_0 - rho_a*g*zref    ! Pressure at zref [Pa]
@@ -239,9 +255,10 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     H_S0pr = -G_S/kappa*thstar_pr    ! Bulk SHF without spray [W m-2]
     H_L0pr = -G_L/kappa*qstar_pr    ! Bulk LHF without spray [W m-2]
     t_delsprD2pr = (th_0 - H_S0pr/G_S*(LOG(delspr/2./z0t) - psiH_delsprD2))*(p_delsprD2/1.e5)**0.286   ! t at mid-layer w/o fdbk [K]
-    t_zref_pr    = (th_0 - H_S0pr/G_S*(LOG(zref/z0t)      - psiH_zref    ))*(p_zref/1.e5)**0.286   ! t at zref w/o fdbk [K]
+    th_zref_pr   =  th_0 - H_S0pr/G_S*(LOG(zref/z0t)      - psiH_zref    )   ! Potential temp at zref w/o fdbk [K]
     q_delsprD2pr =   q_0 - H_L0pr/G_L*(LOG(delspr/2./z0q) - psiH_delsprD2)    ! q at mid-layer w/o fdbk [kg kg-1]
-    q_zref_pr    =   q_0 - H_L0pr/G_L*(LOG(zref/z0q)      - psiH_zref)    ! q at zref w/o fdbk [kg kg-1]
+    q_zref_pr    =   q_0 - H_L0pr/G_L*(LOG(zref/z0q)      - psiH_zref    )    ! q at zref w/o fdbk [kg kg-1]
+    t_zref_pr    = th_zref_pr*(p_zref/1.e5)**0.286    ! t at zref w/o fdbk [K]
     s_delsprD2pr = satratio(t_delsprD2pr,p_delsprD2,q_delsprD2pr,0.99999)    ! s at mid-layer w/o fdbk [-]
     s_zref_pr    = satratio(t_zref_pr   ,p_zref    ,q_zref_pr   ,0.99999)    ! s at zref w/o fdbk [-]
     gamma_S = (LOG(delspr/z0t) - psiH_delspr - 1. + phisprH_delspr)/(LOG(z_1/z0t) - psiH_1)    ! Interfacial SHF fdbk coeff [-]
@@ -329,21 +346,26 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     H_S0 = H_S1 - H_SNspr    ! Surface SHF (interfacial with feedback) [W m-2]
     H_L0 = H_L1 - H_Lspr    ! Surface LHF (interfacial with feedback) [W m-2]
     IF (zref < delspr) THEN    ! zref is within spray layer
-        t_zref = (th_0 - 1./G_S*(H_S0*(LOG(zref/z0t) - psiH_zref) &
-                + zref/delspr*(1. - phisprH_zref)*H_SNspr))*(p_zref/1.e5)**0.286    ! t at zref w/ fdbk [K]
-        q_zref =   q_0 - 1./G_L*(H_L0*(LOG(zref/z0q) - psiH_zref) &
+        th_zref = th_0 - 1./G_S*(H_S0*(LOG(zref/z0t) - psiH_zref) &
+                + zref/delspr*(1. - phisprH_zref)*H_SNspr)    ! th at zref w/ fdbk [K]
+        q_zref  =  q_0 - 1./G_L*(H_L0*(LOG(zref/z0q) - psiH_zref) &
                 + zref/delspr*(1. - phisprH_zref)*H_Lspr)    ! q at zref w/ fdbk [kg kg-1]
+        t_zref = th_zref*(p_zref/1.e5)**0.286    ! t at zref w/ fdbk [K]
     ELSE    ! zref is above spray layer
-        t_zref = (th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref))*(p_zref/1.e5)**0.286    ! [K]
-        q_zref =   q_1 + H_L1/G_L*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [kg kg-1]
+        th_zref = th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [K]
+        q_zref  =  q_1 + H_L1/G_L*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [kg kg-1]
+        t_zref = th_zref*(p_zref/1.e5)**0.286    ! [K]
     END IF
     s_zref = satratio(t_zref,p_zref,q_zref,0.99999)    ! s at zref w/ fdbk [-]
-    dtref_spr = t_zref - t_zref_pr    ! t change at zref due to feedback [K], (+) = warming
-    dqref_spr = q_zref - q_zref_pr    ! q change at zref due to feedback [kg kg-1], (+) = moistening
-    dsref_spr = s_zref - s_zref_pr    ! s change at zref due to feedback [-], (+) = incr s
+    dthref_spr = th_zref - th_zref_pr    ! th change at zref due to feedback [K], (+) = warming
+    dtref_spr  = t_zref  - t_zref_pr    ! t change at zref due to feedback [K], (+) = warming
+    dqref_spr  = q_zref  - q_zref_pr    ! q change at zref due to feedback [kg kg-1], (+) = moistening
+    dsref_spr  = s_zref  - s_zref_pr    ! s change at zref due to feedback [-], (+) = incr s
     thstar = -H_S1*kappa/G_S    ! theta flux scale with spray (based on total SHF) [K]
     qstar  = -H_L1*kappa/G_L    ! q flux scale with spray (based on total LHF) [kg kg-1]
-    thvstar = thstar*(1. + 0.61*q_1) + 0.61*t_1*qstar    ! thetav flux scale with spray [K]
+    thvstar_pr = thstar_pr*(1. + 0.61*q_1) + 0.61*t_1*qstar_pr    ! thetav flux scale without spray [K]
+    thvstar    =    thstar*(1. + 0.61*q_1) + 0.61*t_1*qstar    ! thetav flux scale with spray [K]
+    dthvstar_spr = thvstar - thvstar_pr    ! Change to thvstar due to spray [K]
 
 END IF
 
@@ -838,6 +860,53 @@ REAL :: W
 W = MIN(6.5e-4*MAX(U_10 - 2.,0.)**1.5,1.0)
 
 END FUNCTION
+
+!===============================================================================
+
+SUBROUTINE waveProps(U_10,ustarb,rho_a,eps,dcp,swh,mss)
+
+!-------------------------------------------------------------------------------
+!
+! This is a temporary hack to roughly estimate wave properties based on 
+! atmospheric variables.  It will be replaced by directly parameterizing the 
+! seastate-based SSGF from winds.
+!
+! Inputs:
+!     U_10 - 10-m windspeed [m s-1]
+!     ustarb - bulk friction velocity [m s-1]
+!     rho_a - air density [kg m-3]
+! Outputs:
+!     eps - wave energy dissipation flux [W m-2]
+!     dcp - dominant wave phase speed [m s-1]
+!     swh - significant wave height [m]
+!     mss - mean squared waveslope [-]
+!
+!-------------------------------------------------------------------------------
+
+REAL,INTENT(IN) :: U_10,ustarb,rho_a
+REAL,INTENT(INOUT) :: eps,dcp,swh,mss
+REAL,PARAMETER :: g = 9.81    ! Acceleration due to gravity [m s-2]
+REAL,PARAMETER :: fudge1 = 0.2    ! Fudge factor on eps
+REAL,PARAMETER :: fudge2 = 0.7    ! Fudge factor on mss
+REAL,PARAMETER :: PI = 3.14159
+REAL :: swh_W17,swh_tail
+
+! 1. Significant wave height -- Wang et al. (2017) with hacked tail
+swh_W17 = 0.0143*U_10**2 + 0.9626    ! swh per Wang et al. 2017 [m]
+swh_tail = 7. + 0.14*U_10    ! Hacked linear tail [m]
+swh = (1. - 0.5*(TANH((U_10 - 27.)/7.) + 1.))*swh_W17 &
+         + (0.5*(TANH((U_10 - 29.)/7.) + 1.))*swh_tail    ! Smooth merge between two params
+
+! 2. Dominant phase speed -- Wang et al. (2017)
+dcp = (g*swh/(0.0628*(2.*PI)**1.5*ustarb**0.5))**0.666667    ! [m s-1]
+
+! 3. Wave energy dissipation flux -- Terray et al. (1996) with fudge factor
+eps = rho_a*ustarb**2*0.5*dcp*fudge1    ! [W m-2], factor of 0.5 from T96 Fig 6
+
+! 4. Mean squared waveslope -- Davis et al. (2023) with fudge factor
+mss = 0.109*TANH(0.057*U_10)*fudge2    ! [-]
+
+END SUBROUTINE waveProps
 
 !===============================================================================
 
