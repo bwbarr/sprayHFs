@@ -1,12 +1,12 @@
 # Seastate-Dependent Air-Sea Heat Fluxes with Sea Spray in High Winds
 
-This repository contains subroutines to incorporate seastate-dependent sea spray heat flux physics into an existing bulk surface layer scheme in a coupled regional or global Earth system model.  Parameterization of sea spray generation, which is required for the spray heat flux physics, is also included.  The model implemented herein comes from Barr et al. (2023) (hereafter BCF23).  This model was originally developed by Ben Barr, Shuyi Chen, and Chris Fairall, and it is being actively updated and improved with additional contributions from collaborators including Hyodae Seo, Cesar Sauvage, Jim Edson, and Carol Anne Clayson.
+This repository contains subroutines to incorporate seastate-dependent sea spray heat flux physics into an existing bulk surface layer scheme in a regional or global Earth system model.  Parameterization of sea spray generation, which is required for the spray heat flux physics, is also included.  The model implemented herein originates from Barr, Chen, and Fairall (2023) (hereafter BCF23) and is actively being improved and updated with contributions from many collaborators addressing both model physics and multiscale interactions in model simulations.
 
 The code in this repository is designed to implement spray heat flux physics into an existing Fortran bulk heat flux algorithm with minimal disruption to the existing bulk code.  All subroutines required to implement the spray model are contained in the Fortran module file `module_sprayHFs.F90`.  To use this code, a user will download `module_sprayHFs.F90` into their existing code base, modify their existing surface flux calculations to add a call to the top-level subroutine `sprayHFs()` and to manage its input/output (discussed fully in Section 2 below), and compile `module_sprayHFs.F90` with the existing model code.  Other than minor changes to integrate `module_sprayHFs.F90` into the existing code base (suppressing optional output, etc), the user should not have to change any code in `module_sprayHFs.F90` to implement it (i.e., it is ready to use "out of the box").
 
 Please send any questions about model physics or this module's implementation to Ben Barr at benjamin.barr@whoi.edu.
 
-Spray generation physics and subroutines are discussed in Section 1 below, and spray heat flux physics and subroutines are discussed in Section 2.
+Spray generation physics and subroutines are discussed in Section 1 below, and spray heat flux physics and subroutines are discussed in Section 2.  Other spray interactions including impacts on momentum fluxes and turbulence, as well as participation in cloud processes, are not addressed at this time.  
 
 ## 1. Sea Spray Generation
 
@@ -20,21 +20,41 @@ The spray generation model is selected by providing one of the string keys above
 
 ## 2. Air-Sea Heat Fluxes with Spray
 
-Spray heat fluxes change the total surface sensible and latent heat fluxes, as well as the buoyancy flux (i.e., the Obukhov length) used for stability calculations.  Spray heat flux physics are implemented according to BCF23.  Per BCF23 Eq. 16a and 16b, the total surface sensible and latent heat fluxes with spray, $H_{S,1}$ and $H_{L,1}$ respectively, are
+The spray heat flux physics in this parameterization change the total surface sensible and latent heat fluxes, the buoyancy flux (i.e., the Obukhov length) that determines surface layer stability, and the near-surface profiles of potential temperature $\theta$, temperature $T$, specific humidity $q$, and saturation ration $s$ (i.e. fractional relative humidity or $RH$/100%).  We quantify these changes for inclusion in an existing bulk surface layer algorithm by computing and returning changes to surface heat fluxes, turbulent flux scales, and surface layer conditions at a user-specified reference height, which satisfy the following relationships:
 
 ```math
-H_{S,1} = H^{\prime}_S + \gamma_S \left( H_{S,spr} - H_{R,spr} \right) = H^{\prime}_S + dH_{S,1,spr} \: \: (1a)
+H_{S,1} = H^{\prime}_{S,1} + dH_{S,1,spr} \: \: (1a)
 ```
 ```math
-H_{L,1} = H^{\prime}_L + \gamma_L H_{L,spr} = H^{\prime}_L + dH_{L,1,spr} \: \: (1b)
+H_{L,1} = H^{\prime}_{L,1} + dH_{L,1,spr} \: \: (1b)
 ```
-Here $`H^{\prime}_S`$ and $`H^{\prime}_L`$ are the bulk sensible and latent heat fluxes without spray, which are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.  Equation (1a,b) can be written equivalently in terms of turbulent flux scales as follows:
+```math
+\theta_* = \theta^{\prime}_* + d\theta_{*,spr} \: \: (2a)
+```
+```math
+q_* = q^{\prime}_* + dq_{*,spr} \: \: (2b)
+```
+```math
+\theta_{v*} = \theta^{\prime}_{v*} + d\theta_{v*,spr} \: \: (2c)
+```
+```math
+\theta_{ref} = \theta^{\prime}_{ref} + d\theta_{ref,spr} \: \: (3a)
+```
+```math
+T_{ref} = T^{\prime}_{ref} + dT_{ref,spr} \: \: (3b)
+```
+```math
+q_{ref} = q^{\prime}_{ref} + dq_{ref,spr} \: \: (3c)
+```
+```math
+s_{ref} = s^{\prime}_{ref} + ds_{ref,spr} \: \: (3d)
+```
+
+Here $`H^{\prime}_{S,1}`$ and $`H^{\prime}_{L,1}`$ are the surface sensible and latent heat fluxes without spray, respectively, $`\theta^{\prime}_*`$, $`q^{\prime}_*`$, and $`\theta^{\prime}_{v*}`$ are turbulent flux scales for sensible heat, water vapor, and buoyancy without spray, respectively, and $`\theta^{\prime}_{ref}`$, $`T^{\prime}_{ref}`$, $`q^{\prime}_{ref}`$, and $`s^{\prime}_{ref}`$ are $\theta$, $T$, $q$, and $s$ at a reference height without spray, respectively.  Non-primed versions of these variables represent the same quantities in the presence of spray, and $`dH_{S,1,spr}`$, $`dH_{L,1,spr}`$, $`d\theta_{*,spr}`$, $`dq_{*,spr}`$, $`d\theta_{v*,spr}`$, $`d\theta_{ref,spr}`$, $`dT_{ref,spr}`$, $`dq_{ref,spr}`$, and $`ds_{ref,spr}`$ represent the changes to these variables due to spray.hich are calculated by the existing surface layer scheme.  $H_{S,spr}$, $H_{R,spr}$, and $H_{L,spr}$ are spray heat fluxes, and $\gamma_S$ and $\gamma_L$ are feedback coefficients.  We define $dH_{S,1,spr} = \gamma_S \left( H_{S,spr} - H_{R,spr} \right)$ and $dH_{L,1,spr} = \gamma_L H_{L,spr}$ as the changes to the existing bulk heat fluxes due to spray.  Equation (1a,b) can be written equivalently in terms of turbulent flux scales as follows:
 
 ```math
-\theta* = \theta*^{\prime} + d\theta*_{spr} \: \: (2a)
 ```
 ```math
-q* = q*^{\prime} + dq*_{spr} \: \: (2b)
 ```
 
 Here $\theta* = -H_{S,1}/(\rho_a c_{p,a} u*)$ and $q* = -H_{L,1}/(\rho_a L_v u*)$ are the turbulent flux scales for potential temperature $\theta$ and specific humidity $q$ with spray, and $`\theta*^{\prime} = H^{\prime}_S/(\rho_a c_{p,a} u*)`$ and $`q*^{\prime} = H^{\prime}_L/(\rho_a L_v u*)`$ are the same quantities without spray, with $\rho_a$ as the air density, $c_{p,a}$ as the air specific heat at constant pressure, $u*$ as the friction velocity, and $L_v$ as the latent heat of vaporization of water.  $`d\theta*_{spr} = -dH_{S,1,spr}/(\rho_a c_{p,a} u*)`$ and $`dq*_{spr} = -dH_{L,1,spr}/(\rho_a L_v u*)`$ are changes to $`\theta*^{\prime}`$ and $`q*^{\prime}`$ due to spray.

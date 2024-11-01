@@ -74,13 +74,14 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !         theory using stress, U_1, gf, and L.
 !     z0t - thermal roughness length [m]
 !     z0q - moisture roughness length [m].  Does not have to be equal to z0t.
-!     z_ref - reference height for calculating spray changes to subgrid surface 
-!         layer temperature, specific humidity, and saturation ratio [m].  This 
-!         may be used to update the existing code's calculations of temperature 
-!         and specific humidity at a reference height (e.g., 2 m).  The physics 
-!         of this parameterization do not produce direct changes to the subgrid 
-!         wind profile.  z_ref should not be larger than z_1.  Pass -1 for z_ref
-!         to calculate these changes at the mid-spray layer height.
+!     z_ref - reference height [m] for calculating spray changes to subgrid surface 
+!         layer potential temperature, temperature, specific humidity, and 
+!         saturation ratio.  This may be used to update the existing code's 
+!         calculations of thermodynamic variables at a reference height (e.g., 
+!         2 m).  The physics of this parameterization do not produce direct 
+!         changes to the subgrid wind profile (e.g., 10-m windspeed components).  
+!         z_ref should not be larger than z_1.  Pass -1 for z_ref to calculate 
+!         these changes at the mid-spray-layer height.
 !     whichSSGF - string naming which SSGF to use.  Options are:
 !         'BCF23_Seastate': seastate-dependent, per BCF23 Eq. 1.
 !         'F94_MOM80': widely used F94 wind-based SSGF, using original whitecap 
@@ -350,12 +351,11 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
                 + zref/delspr*(1. - phisprH_zref)*H_SNspr)    ! th at zref w/ fdbk [K]
         q_zref  =  q_0 - 1./G_L*(H_L0*(LOG(zref/z0q) - psiH_zref) &
                 + zref/delspr*(1. - phisprH_zref)*H_Lspr)    ! q at zref w/ fdbk [kg kg-1]
-        t_zref = th_zref*(p_zref/1.e5)**0.286    ! t at zref w/ fdbk [K]
     ELSE    ! zref is above spray layer
         th_zref = th_1 + H_S1/G_S*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [K]
         q_zref  =  q_1 + H_L1/G_L*(LOG(z_1/zref) - psiH_1 + psiH_zref)    ! [kg kg-1]
-        t_zref = th_zref*(p_zref/1.e5)**0.286    ! [K]
     END IF
+    t_zref = th_zref*(p_zref/1.e5)**0.286    ! t at zref w/ fdbk [K]
     s_zref = satratio(t_zref,p_zref,q_zref,0.99999)    ! s at zref w/ fdbk [-]
     dthref_spr = th_zref - th_zref_pr    ! th change at zref due to feedback [K], (+) = warming
     dtref_spr  = t_zref  - t_zref_pr    ! t change at zref due to feedback [K], (+) = warming
