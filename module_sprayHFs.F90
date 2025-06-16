@@ -36,7 +36,7 @@ CONTAINS
 !===============================================================================
 
 SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
-               z_ref,whichSSGF,paramWaves,dHS1_spr,dHL1_spr,dthstar_spr,&
+               z_ref,whichSSGF,param_swh,dHS1_spr,dHL1_spr,dthstar_spr,&
                dqstar_spr,dthvstar_spr,dthref_spr,dtref_spr,dqref_spr,dsref_spr,&
                tau,H_S0pr,H_L0pr,M_spr,H_Tspr,H_Rspr,H_SNspr,H_Lspr,alpha_S,&
                beta_S,beta_L,gamma_S,gamma_L)
@@ -594,6 +594,7 @@ ELSE IF ((whichSSGF == 'dissejec_Wi_BEA25_C3.6') .OR. (whichSSGF == 'dissejec_Wi
     mss = 5.3e-2*ustar_bulk**(0.50 - 0.17*LOG10(ustar_bulk))    ! Wind-based param for mss [-]
     Wa = 0.092*whitecap_BCF23(U_10)    ! Fit of DLM17 whitecap fraction using BCF23 whitecap fraction
     epsDswh = 2.5e-1*ustar_bulk**(1.84 - 0.20*LOG10(ustar_bulk))    ! Wind-based parameterization for eps/swh [W m-3]
+END IF
 eps_KV_mean = Ceps*epsDswh/rho_sw    ! Mean volumetric kinematic dissipation at surface [m2 s-3], per Sutherland and Melville 2015
 eps_KV = eps_KV_mean/Wa    ! Volumetric kinematic dissipation at surface under actively breaking whitecaps [m2 s-3]
 eta_k = (nu_w**3/eps_KV)**0.25    ! Kolmogorov microscale [m]
