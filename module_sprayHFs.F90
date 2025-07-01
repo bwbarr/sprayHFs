@@ -35,8 +35,8 @@ CONTAINS
 
 !===============================================================================
 
-SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
-               z_ref,whichSSGF,param_swh,dHS1_spr,dHL1_spr,dthstar_spr,&
+SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
+               z_ref,whichSSGF,param_delspr_Wi,dHS1_spr,dHL1_spr,dthstar_spr,&
                dqstar_spr,dthvstar_spr,dthref_spr,dtref_spr,dqref_spr,dsref_spr,&
                tau,H_S0pr,H_L0pr,M_spr,H_Tspr,H_Rspr,H_SNspr,H_Lspr,alpha_S,&
                beta_S,beta_L,gamma_S,gamma_L)
@@ -48,7 +48,10 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
 ! fluxes from the ocean to the atmosphere are defined as positive, and momentum
 ! fluxes (stress) from the atmosphere to the ocean are defined as positive.  
 ! Positive heat fluxes correspond to negative values of the turbulent flux 
-! scales thstar, qstar, and thvstar.
+! scales thstar, qstar, and thvstar.  Wave properties eps, dcp, and mss are
+! required if using an 'SS' whichSSGF option (otherwise pass dummy values, e.g.,
+! zeros).  Wave property swh is required if using an 'SS' whichSSGF option or if
+! param_delspr_Wi is False (otherwise pass dummy values).
 !
 ! Inputs:
 !     z_1 - height of lowest atmospheric model mass level [m]
@@ -63,8 +66,7 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
 !     t_0 - sea surface temperature (interfacial temp, not bulk layer temp) [K]
 !     eps - wave energy dissipation flux [W m-2]
 !     dcp - dominant wave phase speed [m s-1]
-!     swh_in - significant wave height [m].  Input value that may be replaced by
-!         parameterization if param_swh is True.
+!     swh - significant wave height [m]
 !     mss - mean square wave slope [-]
 !     L - Obukhov stability length [m].  This is considered "known" for this
 !         subroutine's computations but may be determined iteratively by the 
@@ -130,10 +132,8 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
 !                 Uses fs = 2.2, which gives lower spray generation than the 
 !                 published BCF23 results, but matches the F94+MOM80+fs0.4+30m/s
 !                 datum.
-!     param_swh - True to parameterize significant wave height used for spray 
-!         layer thickness and droplet residence time, False to use input values.
-!         If True, dummy values (e.g., zeroes) should be passed in the subroutine 
-!         call for swh.
+!     param_delspr_Wi - True to parameterize spray layer thickness using U10,
+!         False to parameterize using input swh.
 ! Outputs:
 !     dHS1_spr - change to total surface sensible heat flux due to spray [W m-2]
 !     dHL1_spr - change to total surface latent heat flux due to spray [W m-2]
@@ -179,9 +179,9 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,&
 !
 !-------------------------------------------------------------------------------
 
-REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh_in,mss,L,z0,z0t,z0q,z_ref
+REAL,INTENT(IN) :: z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,z_ref
 CHARACTER(LEN=*),INTENT(IN) :: whichSSGF
-LOGICAL,INTENT(IN) :: param_swh
+LOGICAL,INTENT(IN) :: param_delspr_Wi
 REAL,INTENT(OUT) :: dHS1_spr
 REAL,INTENT(OUT) :: dHL1_spr
 REAL,INTENT(OUT) :: dthstar_spr
@@ -220,7 +220,7 @@ REAL,PARAMETER :: Ms = 58.44    ! Molecular weight of salt [g mol-1]
 REAL,PARAMETER :: xs = 0.035    ! Mass fraction of salt in seawater [-]
 
 REAL :: Sg_1,ustar,U_10
-REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,swh,p_1,p_delsprD2,p_zref,th_0,&
+REAL :: Lv,delspr,zref,rdryBYr0,y0,q_0,tv_1,rho_a,p_1,p_delsprD2,p_zref,th_0,&
         th_1,tC_1,k_a,nu_a,Dv_a,gammaWB
 REAL :: psiH_1,psiH_delspr,psiH_delsprD2,psiH_zref,phisprH_delspr,phisprH_zref,thstar_pr,&
         qstar_pr,G_S,G_L,t_delsprD2pr,th_zref_pr,t_zref_pr,q_delsprD2pr,q_zref_pr,&
@@ -242,7 +242,7 @@ REAL,DIMENSION(25) :: v_g,dmdr0,tauf,Fp,tauT,zT
 
 ! 1. Check if U_10 >= sprayLB.  If so, perform spray calculations --------------
 Sg_1 = U_1*gf    ! Windspeed magnitude at z_1 including gustiness [m s-1]
-ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensity (not bulk fric velocity) [m s-1]
+ustar = Sg_1*kappa/(LOG(z_1/z0) - stabIntM(z_1/L))    ! Local turbulence intensity including gustiness (not bulk fric velocity) [m s-1]
 U_10 = ustar/kappa/gf*(LOG(10./z0) - stabIntM(10./L))    ! 10m windspeed [m s-1], gustiness removed
 IF (U_10 < sprayLB) THEN    ! Set returned fields to zero or dummy (999) values
 
@@ -261,12 +261,11 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
     q_0 = qsat0(t_0,p_0)*(1. + y0)    ! Specific humidity at surface (accounting for salt) [kg kg-1]
     tv_1 = t_1*(1.+0.608*q_1)    ! Virtual temperature at z_1 [K]
     rho_a = (p_0 - 1.25*g*z_1)/(Rdry*tv_1)    ! Air density at z_1 [kg m-3], adjusting pressure using rho_a~1.25 kg m-3
-    IF (param_swh) THEN    ! Parameterize swh
-        swh = swh_WEA17Mod(U_10)
-    ELSE
-        swh = swh_in
+    IF (param_delspr_Wi) THEN    ! Parameterize delspr using winds
+        delspr = MIN(swh_WEA17Mod(U_10),z_1)    ! Spray layer thickness [m], nominally one swh per M&V2014a.  Limited to z_1.
+    ELSE    ! Parameterize delspr using input swh
+        delspr = MIN(swh,z_1)    ! Spray layer thickness [m], nominally one swh per M&V2014a.  Limited to z_1.
     END IF
-    delspr = MIN(swh,z_1)    ! Spray layer thickness [m], nominally one swh per M&V2014a.  Limited to z_1.
     IF (z_ref < 0.) THEN    ! Set reference height to user-defined value or mid-spray layer height
         zref = delspr/2.
     ELSE
@@ -591,9 +590,9 @@ IF ((whichSSGF == 'dissejec_SS_BCF23_published') .OR. (whichSSGF == 'dissejec_SS
 ELSE IF ((whichSSGF == 'dissejec_Wi_BEA25_C3.6') .OR. (whichSSGF == 'dissejec_Wi_BEA25_C4.X') .OR. &
         (whichSSGF == 'dissejec_Wi_BCF23_fixed')) THEN
     dcp = 21.0    ! Assign constant value
-    mss = 5.3e-2*ustar_bulk**(0.50 - 0.17*LOG10(ustar_bulk))    ! Wind-based param for mss [-]
+    mss = 2.6e-3*U_10**(1.4 - 0.31*LOG10(U_10))    ! Wind-based param for mss [-]
     Wa = 0.092*whitecap_BCF23(U_10)    ! Fit of DLM17 whitecap fraction using BCF23 whitecap fraction
-    epsDswh = 2.5e-1*ustar_bulk**(1.84 - 0.20*LOG10(ustar_bulk))    ! Wind-based parameterization for eps/swh [W m-3]
+    epsDswh = 4.9e-6*U_10**(4.8 - 0.95*LOG10(U_10))    ! Wind-based parameterization for eps/swh [W m-3]
 END IF
 eps_KV_mean = Ceps*epsDswh/rho_sw    ! Mean volumetric kinematic dissipation at surface [m2 s-3], per Sutherland and Melville 2015
 eps_KV = eps_KV_mean/Wa    ! Volumetric kinematic dissipation at surface under actively breaking whitecaps [m2 s-3]
@@ -952,10 +951,10 @@ FUNCTION swh_WEA17Mod(U_10) RESULT(swh_merge)
 
 !-------------------------------------------------------------------------------
 !
-! This is a preliminary parameterization for SWH that adds a high-wind tail to 
+! This is an ad hoc parameterization for SWH that adds a high-wind tail to 
 ! a model by Wang et al. (2017).  The tail is based on UMWM output in TCs and is 
-! added to capture rolloff in SWH at very high winds.  This is model-specific and
-! ad hoc and should not be used outside this spray module.
+! added to capture rolloff in SWH at very high winds.  This should not be used 
+! for general estimation of SWH outside this spray module.
 !
 ! Inputs:
 !     U_10 - 10-m windspeed [m s-1]
@@ -968,9 +967,9 @@ REAL,INTENT(IN) :: U_10
 REAL :: swh_WEA17,swh_tail,swh_merge
 
 swh_WEA17 = 0.0143*U_10**2 + 0.9626    ! swh per Wang et al. 2017 [m]
-swh_tail = 7. + 0.14*U_10    ! Hacked linear tail [m]
-swh_merge = (1. - 0.5*(TANH((U_10 - 27.)/7.) + 1.))*swh_WEA17 &
-               + (0.5*(TANH((U_10 - 29.)/7.) + 1.))*swh_tail    ! Smooth merge between two params
+swh_tail = 5.5 + 0.14*U_10    ! Hacked linear tail [m]
+swh_merge = (1. - 0.5*(TANH((U_10 - 24.)/7.) + 1.))*swh_WEA17 &
+               + (0.5*(TANH((U_10 - 26.)/7.) + 1.))*swh_tail    ! Smooth merge between two params
 
 END FUNCTION
 
