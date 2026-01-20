@@ -3,10 +3,10 @@ MODULE module_sprayHFs
 IMPLICIT NONE
 PUBLIC :: sprayHFs
 PUBLIC :: update_HFs
-PUBLIC :: ssgf_dissejec_BCF23
-PUBLIC :: ssgf_whitecap_F94
+PUBLIC :: ssgf_dissejec
+PUBLIC :: ssgf_whitecap
 PUBLIC :: z0tq_COARE36
-PUBLIC :: z0tq_COARE4X
+PUBLIC :: z0tq_BEA26
 PUBLIC :: qsat0
 PUBLIC :: satratio
 PUBLIC :: stabIntM
@@ -22,12 +22,11 @@ PUBLIC :: fall_velocity_PK97
 !
 !        SEASTATE-DEPENDENT AIR-SEA HEAT FLUXES WITH SPRAY IN HIGH WINDS 
 !
-!     This module contains subroutines to incorporate seastate-dependent sea 
-! spray heat flux physics into an existing bulk surface layer scheme in a
-! numerical forecast model.  This code is maintained at https://github.com/bwbarr/sprayHFs, 
-! where documentation and the latest version are available.  Please send any 
-! questions about model physics or this module's implementation to Ben Barr 
-! at benjamin.barr@whoi.edu.
+!     This module contains subroutines to incorporate sea spray heat flux physics
+! into an existing bulk surface layer scheme in a numerical forecast model.  This
+! code is maintained at https://github.com/bwbarr/sprayHFs, where documentation 
+! and the latest version are available.  Please send any questions about model 
+! physics or this module's implementation to Ben Barr at bwbarr@hawaii.edu.
 !
 !===============================================================================
 
@@ -48,9 +47,9 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 ! Subroutine to calculate spray modifications to heat fluxes and surface layer 
 ! properties.  Implemented per Barr et al. (2023) (hereafter BCF23).  Heat 
 ! fluxes from the ocean to the atmosphere are defined as positive, and momentum
-! fluxes (stress) from the atmosphere to the ocean are defined as positive.  
-! Positive heat fluxes correspond to negative values of the turbulent flux 
-! scales thstar, qstar, and thvstar.  The wave properties eps, dcp, and mss are
+! flux from the atmosphere to the ocean is defined as positive.  Positive heat 
+! fluxes correspond to negative values of the turbulent flux scales thstar, 
+! qstar, and thvstar.  The wave properties eps, dcp, and mss are
 ! required if using an 'SS' whichSSGF option, otherwise dummy values, e.g.,
 ! zeros, should be passed.  The wave property swh is required if using an 'SS' 
 ! whichSSGF option OR if param_delspr_Wi is False, otherwise dummy values should
@@ -91,49 +90,43 @@ SUBROUTINE sprayHFs(z_1,t_1,q_1,U_1,gf,p_0,t_0,eps,dcp,swh,mss,L,z0,z0t,z0q,&
 !     whichSSGF - string naming which SSGF to use.  Options are:
 !         Dissipation-ejection based:
 !             'dissejec_SS_BCF23' - Uses original BCF23 spray model coefficients
-!                 (with calibration bug), i.e., fs = 2.2, C1 = 1.35, C2 = 0.1116, which 
-!                 reproduces the published BCF23 results.  This does not match the 
-!                 (corrected) F94+MOM80+fs0.4+30m/s datum.  Parameterized by seastate 
-!                 according to BCF23.
+!                 (with calibration bug), i.e., [fs,C1,C2,C3,C4,C5] = 
+!                 [2.2,1.35,0.1116,0.719,2.17,0.852], which reproduce the published BCF23
+!                 results.  This does not match the (corrected) F94+MOM80+fs0.4+30m/s datum.
+!                 Parameterized by seastate.
 !             'dissejec_Wi_BCF23' - Same as above, except parameterized by winds 
-!                 per BEA26.
-!             'dissejec_SS_BEA26_Cntl' - Uses BEA26 Control spray model coefficients, 
-!                 i.e., fs = 2.2, C1 = 0.969, C2 = 0.1116, which corrects the 
-!                 calibration bug, causing lower spray production than in the 
+!                 using wave approximations of BEA26.
+!             'dissejec_SS_C3.6_CtlSpr' - Uses C3.6_CtlSpr model coefficients from BEA26, 
+!                 i.e., [fs,C1,C2,C3,C4,C5] = [2.2,0.969,0.1116,0.719,2.17,0.852], which 
+!                 corrects the calibration bug, causing lower spray production than in the 
 !                 published BCF23.  Matches the F94+MOM80+fs0.4+30m/s datum.
-!                 Parameterized by seastate according to BCF23.
-!             'dissejec_Wi_BEA26_Cntl' - Same as above, except parameterized by winds
-!                 per BEA26.
-!             'dissejec_SS_BEA26_C3.6' - Uses BEA26 C3.6 Calibration spray model
-!                 coefficients, i.e., fs = 2.2, C1 = 0.969, C2 = 0.07, which are
-!                 optimized for use with COARE 3.6 scalar roughness lengths.  
-!                 Matches the F94+MOM80+fs0.4+30m/s datum.  Parameterized by 
-!                 seastate according to BCF23.
-!             'dissejec_Wi_BEA26_C3.6' - Same as above, except parameterized by winds
-!                 per BEA26.
-!             'dissejec_SS_BEA26_C4.X' - Uses BEA26 C4.X Calibration spray model
-!                 coefficients, i.e., fs = 2.2, C1 = 0.969, C2 = 0.15, which are
-!                 optimized for use with COARE 4.X scalar roughness lengths.
-!                 Matches the F94+MOM80+fs0.4+30m/s datum.  Parameterized by 
-!                 seastate according to BCF23.
-!             'dissejec_Wi_BEA26_C4.X' - Same as above, except parameterized by winds
-!                 per BEA26.
+!                 Parameterized by seastate.
+!             'dissejec_Wi_C3.6_CtlSpr' - Same as above, except parameterized by winds.
+!             'dissejec_SS_C3.6_OptSpr' - Uses C3.6_OptSpr model coefficients from BEA26,
+!                 i.e., [fs,C1,C2,C3,C4,C5] = [2.2,0.969,0.0759,0.719,2.17,0.852], which
+!                 are optimized for use with COARE 3.6 scalar roughness lengths.  Matches 
+!                 the F94+MOM80+fs0.4+30m/s datum.  Parameterized by seastate.
+!             'dissejec_Wi_C3.6_OptSpr' - Same as above, except parameterized by winds.
+!             'dissejec_SS_BEA26_OptSpr' - Uses BEA26_OptSpr model coefficients from BEA26,
+!                 i.e., [fs,C1,C2,C3,C4,C5] = [2.2,0.969,0.120,0.719,2.17,0.852], which 
+!                 are optimized for use with BEA26 scalar roughness lengths.  Matches the 
+!                 F94+MOM80+fs0.4+30m/s datum.  Parameterized by seastate.
+!             'dissejec_Wi_BEA26_OptSpr' - Same as above, except parameterized by winds.
 !         Whitecap based:
-!             'whitecap_Wi_F94_MOM80' - parameterized by winds, using F94 size
-!                 distribution with MOM80 whitecap fraction.  The spray mass
+!             'whitecap_Wi_MOM80' - parameterized by winds, using F94 size
+!                 distribution with MOM80 whitecap fraction and fs = 0.4.  The spray mass
 !                 flux from this model at U10 = 30 m/s with fs = 0.4 is currently
 !                 the datum for all other options.  The datum was calculated 
 !                 incorrectly in BCF23, leading to the 'published' vs 'fixed'
-!                 versions for some SSGFs.
-!             'whitecap_Wi_F94_BCF23_published' - parameterized by winds, using
+!                 versions of 'whitecap_Wi_BCF23'.
+!             'whitecap_Wi_BCF23_published' - parameterized by winds, using
 !                 F94 size distribution with BCF23 wind-based whitecap fraction.
 !                 Uses fs = 3.1, which does not match the F94+MOM80+fs0.4+30m/s
 !                 datum but reproduces the (incorrect) published BCF23 results.
-!             'whitecap_Wi_F94_BCF23_fixed' - parameterized by winds, using 
+!             'whitecap_Wi_BCF23_fixed' - parameterized by winds, using 
 !                 F94 size distribution with BCF23 wind-based whitecap fraction.
 !                 Uses fs = 2.2, which gives lower spray generation than the 
-!                 published BCF23 results, but matches the F94+MOM80+fs0.4+30m/s
-!                 datum.
+!                 published BCF23 results, but matches the F94+MOM80+fs0.4+30m/s datum.
 !     param_delspr_Wi - True to parameterize spray layer thickness using U10,
 !         False to parameterize using input swh.
 ! Outputs:
@@ -292,19 +285,19 @@ ELSE IF (U_10 >= sprayLB) THEN    ! Perform spray calculations
 
     ! 4. Calculate spray generation and some droplet properties ----------------
     v_g = fall_velocity_PK97(r0)    ! Droplet settling velocity [m s-1]
-    IF (     (whichSSGF == 'dissejec_SS_BCF23')      .OR. &
-             (whichSSGF == 'dissejec_Wi_BCF23')      .OR. &
-             (whichSSGF == 'dissejec_SS_BEA26_Cntl') .OR. &
-             (whichSSGF == 'dissejec_Wi_BEA26_Cntl') .OR. &
-             (whichSSGF == 'dissejec_SS_BEA26_C3.6') .OR. &
-             (whichSSGF == 'dissejec_Wi_BEA26_C3.6') .OR. &
-             (whichSSGF == 'dissejec_SS_BEA26_C4.X') .OR. &
-             (whichSSGF == 'dissejec_Wi_BEA26_C4.X')) THEN
-        CALL ssgf_dissejec_BCF23(whichSSGF,eps,swh,dcp,mss,ustar,z0,L,gf,r0,delta_r0,v_g,M_spr,dmdr0)
-    ELSE IF ((whichSSGF == 'whitecap_Wi_F94_MOM80')           .OR. &
-             (whichSSGF == 'whitecap_Wi_F94_BCF23_published') .OR. &
-             (whichSSGF == 'whitecap_Wi_F94_BCF23_fixed')) THEN
-        CALL ssgf_whitecap_F94(whichSSGF,U_10,r0,delta_r0,M_spr,dmdr0)
+    IF (     (whichSSGF == 'dissejec_SS_BCF23')        .OR. &
+             (whichSSGF == 'dissejec_Wi_BCF23')        .OR. &
+             (whichSSGF == 'dissejec_SS_C3.6_CtlSpr')  .OR. &
+             (whichSSGF == 'dissejec_Wi_C3.6_CtlSpr')  .OR. &
+             (whichSSGF == 'dissejec_SS_C3.6_OptSpr')  .OR. &
+             (whichSSGF == 'dissejec_Wi_C3.6_OptSpr')  .OR. &
+             (whichSSGF == 'dissejec_SS_BEA26_OptSpr') .OR. &
+             (whichSSGF == 'dissejec_Wi_BEA26_OptSpr')) THEN
+        CALL ssgf_dissejec(whichSSGF,eps,swh,dcp,mss,ustar,z0,L,gf,r0,delta_r0,v_g,M_spr,dmdr0)
+    ELSE IF ((whichSSGF == 'whitecap_Wi_MOM80')           .OR. &
+             (whichSSGF == 'whitecap_Wi_BCF23_published') .OR. &
+             (whichSSGF == 'whitecap_Wi_BCF23_fixed')) THEN
+        CALL ssgf_whitecap(whichSSGF,U_10,r0,delta_r0,M_spr,dmdr0)
     END IF
     tauf = delspr/v_g    ! Characteristic droplet settling time [s]
     Fp = 1. + 0.25*(2.*v_g*r0/nu_a)**0.5    ! Slip factor (Pr&Kl) [-]
@@ -492,7 +485,7 @@ END SUBROUTINE update_HFs
 
 !===============================================================================
 
-SUBROUTINE ssgf_dissejec_BCF23(whichSSGF,eps,swh,dcp_in,mss_in,ustar,z0,L,gf,r0,delta_r0,v_g,M_spr,dmdr0)
+SUBROUTINE ssgf_dissejec(whichSSGF,eps,swh,dcp_in,mss_in,ustar,z0,L,gf,r0,delta_r0,v_g,M_spr,dmdr0)
 
 !-------------------------------------------------------------------------------
 !
@@ -503,10 +496,10 @@ SUBROUTINE ssgf_dissejec_BCF23(whichSSGF,eps,swh,dcp_in,mss_in,ustar,z0,L,gf,r0,
 !
 ! Inputs:
 !     whichSSGF - string naming which SSGF to use. Options are:
-!         Seastate-based: 'dissejec_SS_BCF23','dissejec_SS_BEA26_Cntl', 
-!             'dissejec_SS_BEA26_C3.6','dissejec_SS_BEA26_C4.X'
-!         Wind-based: 'dissejec_Wi_BCF23','dissejec_Wi_BEA26_Cntl',
-!             'dissejec_Wi_BEA26_C3.6','dissejec_Wi_BEA26_C4.X'
+!         Seastate-based: 'dissejec_SS_BCF23','dissejec_SS_C3.6_CtlSpr', 
+!             'dissejec_SS_C3.6_OptSpr','dissejec_SS_BEA26_OptSpr'
+!         Wind-based: 'dissejec_Wi_BCF23','dissejec_Wi_C3.6_CtlSpr',
+!             'dissejec_Wi_C3.6_OptSpr','dissejec_Wi_BEA26_OptSpr'
 !     eps - wave energy dissipation flux [kg s-3], not used for wind-based models
 !     swh - significant wave height [m], not used for wind-based models
 !     dcp_in - dominant wave phase velocity [m s-1], not used for wind-based models
@@ -545,14 +538,14 @@ REAL,DIMENSION(25) :: dmdr0_form,ejecprob
 REAL,DIMENSION(6) :: model_coeffs
 
 ! Set model coefficients
-IF      ((whichSSGF == 'dissejec_SS_BCF23')      .OR. (whichSSGF == 'dissejec_Wi_BCF23')) THEN
+IF      ((whichSSGF == 'dissejec_SS_BCF23')        .OR. (whichSSGF == 'dissejec_Wi_BCF23')) THEN
     model_coeffs = (/ 2.2, 1.35,  0.1116, 0.719, 2.17, 0.852 /)
-ELSE IF ((whichSSGF == 'dissejec_SS_BEA26_Cntl') .OR. (whichSSGF == 'dissejec_Wi_BEA26_Cntl')) THEN
+ELSE IF ((whichSSGF == 'dissejec_SS_C3.6_CtlSpr')  .OR. (whichSSGF == 'dissejec_Wi_C3.6_CtlSpr')) THEN
     model_coeffs = (/ 2.2, 0.969, 0.1116, 0.719, 2.17, 0.852 /)
-ELSE IF ((whichSSGF == 'dissejec_SS_BEA26_C3.6') .OR. (whichSSGF == 'dissejec_Wi_BEA26_C3.6')) THEN
-    model_coeffs = (/ 2.2, 0.969, 0.07,   0.719, 2.17, 0.852 /)    ! C2 will change after C3.6 tuning
-ELSE IF ((whichSSGF == 'dissejec_SS_BEA26_C4.X') .OR. (whichSSGF == 'dissejec_Wi_BEA26_C4.X')) THEN
-    model_coeffs = (/ 2.2, 0.969, 0.15,   0.719, 2.17, 0.852 /)    ! C2 will change after C4.X tuning
+ELSE IF ((whichSSGF == 'dissejec_SS_C3.6_OptSpr')  .OR. (whichSSGF == 'dissejec_Wi_C3.6_OptSpr')) THEN
+    model_coeffs = (/ 2.2, 0.969, 0.0759, 0.719, 2.17, 0.852 /)    ! C2 will change after C3.6 tuning
+ELSE IF ((whichSSGF == 'dissejec_SS_BEA26_OptSpr') .OR. (whichSSGF == 'dissejec_Wi_BEA26_OptSpr')) THEN
+    model_coeffs = (/ 2.2, 0.969, 0.120,  0.719, 2.17, 0.852 /)    ! C2 will change after C4.X tuning
 END IF
 fs = model_coeffs(1)    ! Model coefficient scaling SSGF magnitude [-].  This is the traditional 'sourcestrength'.
 C1 = model_coeffs(2)    ! Additional model coefficient scaling SSGF magnitude [-]
@@ -566,14 +559,14 @@ ustar_bulk = ustar/SQRT(gf)    ! Bulk friction velocity [m s-1]
 h_gust = 200.*z0    ! Gust height [m]
 U_h  = ustar/kappa/gf*(LOG(h_gust/z0) - stabIntM(h_gust/L))    ! Windspeed at gust height [m s-1], gustiness removed
 U_10 = ustar/kappa/gf*(LOG(10./z0)    - stabIntM(10./L))    ! 10-m windspeed [m s-1], gustiness removed
-IF ((whichSSGF == 'dissejec_SS_BCF23') .OR. (whichSSGF == 'dissejec_SS_BEA26_Cntl') .OR. &
-        (whichSSGF == 'dissejec_SS_BEA26_C3.6') .OR. (whichSSGF == 'dissejec_SS_BEA26_C4.X')) THEN
+IF ((whichSSGF == 'dissejec_SS_BCF23') .OR. (whichSSGF == 'dissejec_SS_C3.6_CtlSpr') .OR. &
+        (whichSSGF == 'dissejec_SS_C3.6_OptSpr') .OR. (whichSSGF == 'dissejec_SS_BEA26_OptSpr')) THEN
     dcp = dcp_in    ! Assign input to dcp
     mss = mss_in    ! Assign input to mss
     Wa = whitecapActive_DLM17(dcp,ustar_bulk,swh)    ! Actively breaking whitecap fraction [-]
     epsDswh = eps/swh    ! If using waves, ratio of eps to swh is simply calculated [W m-3]
-ELSE IF ((whichSSGF == 'dissejec_Wi_BCF23') .OR. (whichSSGF == 'dissejec_Wi_BEA26_Cntl') .OR. &
-        (whichSSGF == 'dissejec_Wi_BEA26_C3.6') .OR. (whichSSGF == 'dissejec_Wi_BEA26_C4.X')) THEN
+ELSE IF ((whichSSGF == 'dissejec_Wi_BCF23') .OR. (whichSSGF == 'dissejec_Wi_C3.6_CtlSpr') .OR. &
+        (whichSSGF == 'dissejec_Wi_C3.6_OptSpr') .OR. (whichSSGF == 'dissejec_Wi_BEA26_OptSpr')) THEN
     dcp = 21.0    ! Assign constant value
     mss = 2.6e-3*U_10**(1.4 - 0.31*LOG10(U_10))    ! Wind-based param for mss [-]
     Wa = 0.092*whitecap_BCF23(U_10)    ! Fit of DLM17 whitecap fraction using BCF23 whitecap fraction
@@ -593,11 +586,11 @@ dmdr0 = dmdr0_form*ejecprob    ! Ejected droplet spectrum [kg m-2 s-1 m-1]
 ! Calculate total spray mass flux
 M_spr = DOT_PRODUCT(dmdr0,delta_r0)    ! [kg m-2 s-1]
 
-END SUBROUTINE ssgf_dissejec_BCF23
+END SUBROUTINE ssgf_dissejec
 
 !===============================================================================
 
-SUBROUTINE ssgf_whitecap_F94(whichSSGF,U_10,r0,delta_r0,M_spr,dmdr0)
+SUBROUTINE ssgf_whitecap(whichSSGF,U_10,r0,delta_r0,M_spr,dmdr0)
 
 !-------------------------------------------------------------------------------
 !
@@ -607,8 +600,8 @@ SUBROUTINE ssgf_whitecap_F94(whichSSGF,U_10,r0,delta_r0,M_spr,dmdr0)
 ! Inputs:
 !     whichSSGF - string naming which SSGF to use. Options are:
 !         Seastate-based: None
-!         Wind-based: 'whitecap_Wi_F94_MOM80', 'whitecap_Wi_F94_BCF23_published',
-!             'whitecap_Wi_F94_BCF23_fixed'
+!         Wind-based: 'whitecap_Wi_MOM80', 'whitecap_Wi_BCF23_published',
+!             'whitecap_Wi_BCF23_fixed'
 !     U_10 - 10-m windspeed [m s-1]
 !     r0 - SSGF radius vector [m]
 !     delta_r0 - SSGF bin width vector [m]
@@ -642,15 +635,15 @@ REAL,DIMENSION(25) :: r0_micrometers,r80,dFdr80,dFdr0_11ms,dFdr0_perWC,&
         dVdr0_perWC
 
 ! Set parameters for chosen SSGF
-IF (whichSSGF == 'whitecap_Wi_F94_MOM80') THEN
+IF (whichSSGF == 'whitecap_Wi_MOM80') THEN
     fs = 0.4
     WC_A92_11ms = whitecap_MOM80(11.)    ! Whitecap fraction of A92 source function at 11 m/s [-]
     WC = whitecap_MOM80(U_10)    ! Whitecap fraction at input U_10 [-]
-ELSE IF ((whichSSGF == 'whitecap_Wi_F94_BCF23_published') .OR. &
-         (whichSSGF == 'whitecap_Wi_F94_BCF23_fixed')) THEN
-    IF (whichSSGF == 'whitecap_Wi_F94_BCF23_published') THEN
+ELSE IF ((whichSSGF == 'whitecap_Wi_BCF23_published') .OR. &
+         (whichSSGF == 'whitecap_Wi_BCF23_fixed')) THEN
+    IF (whichSSGF == 'whitecap_Wi_BCF23_published') THEN
         fs = 3.1
-    ELSE IF (whichSSGF == 'whitecap_Wi_F94_BCF23_fixed') THEN
+    ELSE IF (whichSSGF == 'whitecap_Wi_BCF23_fixed') THEN
         fs = 2.2
     END IF
     WC_A92_11ms = whitecap_BCF23(11.)    ! Whitecap fraction of A92 source function at 11 m/s [-]
@@ -680,8 +673,8 @@ DO i = 1,25
     END IF
 END DO
 ! dFdr0_11ms below used to have a bug where r0 was mistakenly used instead of r0_micrometers.  This
-! was corrected and the effect of the bug can be seen by comparing the various 'published' and 'fixed'
-! versions of the SSGFs.
+! was corrected and the effect of the bug can be seen by comparing the various published and 
+! corrected versions of the SSGFs.
 dFdr0_11ms = dFdr80*0.506*r0_micrometers**(-0.024)    ! A92 source function at 11 m/s, based on r0 [m-2 s-1 um-1]
 
 ! Convert to per-whitecap basis and then to final mass-based SSGF
@@ -692,7 +685,7 @@ dmdr0 = fs*rho_w*dVdr0_perWC*WC    ! F94 mass source function [kg m-2 s-1 m-1]
 ! Calculate total spray mass flux
 M_spr = DOT_PRODUCT(dmdr0,delta_r0)    ! [kg m-2 s-1]
 
-END SUBROUTINE ssgf_whitecap_F94
+END SUBROUTINE ssgf_whitecap
 
 !===============================================================================
 
@@ -720,11 +713,12 @@ END SUBROUTINE z0tq_COARE36
 
 !===============================================================================
 
-SUBROUTINE z0tq_COARE4X(Restar,z0t,z0q)
+SUBROUTINE z0tq_BEA26(Restar,z0t,z0q)
 
 !-------------------------------------------------------------------------------
 !
-! Subroutine to calculate scalar roughness lengths per COARE 4.X algorithm.
+! Subroutine to calculate scalar roughness lengths per the Barr et al. (2026, 
+! BEA26) algorithm.
 !
 ! Inputs:
 !     Restar - roughness Reynolds number [-]
@@ -739,13 +733,13 @@ REAL,INTENT(OUT) :: z0t,z0q
 REAL,PARAMETER :: kappa = 0.4    ! von Karman constant [-]
 REAL,PARAMETER :: Pr = 0.71    ! Prandtl number for air [-]
 REAL,PARAMETER :: Sc = 0.60    ! Schmidt number for water vapor in air [-]
-REAL :: z0tz0q_G92_smooth    ! Ratio z0t/z0q for smooth flow per Garratt (1992) [-]
+REAL :: z0tDz0q_G92_smooth    ! Ratio z0t/z0q for smooth flow per Garratt (1992) [-]
 
-z0q = MIN(1.0e-4,7.5e-5*Restar**(-0.5),1.8e-3*Restar**(-1.5))    ! [m]
-z0tz0q_G92_smooth = EXP(13.6*kappa*(Sc**0.666667 - Pr**0.666667))    ! [-]
-z0t = z0q*z0tz0q_G92_smooth    ! [m]
+z0q = MIN(1.0e-4,7.5e-5*Restar**(-0.5),3.05e-4*Restar**(-1.05))    ! [m]
+z0tDz0q_G92_smooth = EXP(13.6*kappa*(Sc**0.666667 - Pr**0.666667))    ! [-]
+z0t = z0q*z0tDz0q_G92_smooth    ! [m]
 
-END SUBROUTINE z0tq_COARE4X
+END SUBROUTINE z0tq_BEA26
 
 !===============================================================================
 
