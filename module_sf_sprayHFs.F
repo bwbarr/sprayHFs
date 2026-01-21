@@ -1,4 +1,4 @@
-MODULE module_sprayHFs
+MODULE module_sf_sprayHFs
 
 IMPLICIT NONE
 PUBLIC :: sprayHFs
@@ -27,6 +27,12 @@ PUBLIC :: fall_velocity_PK97
 ! code is maintained at https://github.com/bwbarr/sprayHFs, where documentation 
 ! and the latest version are available.  Please send any questions about model 
 ! physics or this module's implementation to Ben Barr at bwbarr@hawaii.edu.
+!
+!
+! ******************************************************************************
+! This branch handles the implementation of the spray code into the NASA NU-WRF
+! model.  The spray code is implemented in the MYNN surface layer module.
+! ******************************************************************************
 !
 !===============================================================================
 
@@ -1064,4 +1070,4 @@ END FUNCTION
 
 !===============================================================================
 
-END MODULE module_sprayHFs
+END MODULE module_sf_sprayHFs
